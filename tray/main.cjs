@@ -17,6 +17,7 @@ const path = require("node:path");
 const { createAutoLaunch } = require("./auto-launch.cjs");
 const { makeIntegrationGuide } = require("./integration-guide.cjs");
 const { parseAppPort, selectServerPort } = require("./port-selection.cjs");
+const { getObsidianState, getWikiGitState, makeObsidianOpenUri } = require("./wiki-workspace.cjs");
 
 const packageRoot = path.resolve(__dirname, "..");
 const packagedDataRoot = path.join(
@@ -31,7 +32,7 @@ const managedWikiRoot = app.isPackaged
   : undefined;
 const configuredWikiRoot = process.env.WIKI_ROOT
   ? path.resolve(process.env.WIKI_ROOT)
-  : managedWikiRoot;
+  : managedWikiRoot || path.resolve(packageRoot, "..", "wiki");
 const dataDir = process.env.WIKI_SERVER_DATA_DIR
   ? path.resolve(process.env.WIKI_SERVER_DATA_DIR)
   : app.isPackaged
@@ -86,6 +87,7 @@ let serverProcess = null;
 let status = "starting";
 let externallyManaged = false;
 let quitting = false;
+let workspaceStateCache = null;
 
 const hasLock = app.requestSingleInstanceLock();
 if (!hasLock) {
@@ -351,8 +353,8 @@ function registerDesktopHandlers() {
     }
     return requestApi("POST", `/jobs/${encodeURIComponent(id)}/cancel`);
   });
-  ipcMain.handle("desktop:open-data", () =>
-    shell.openPath(app.isPackaged ? packagedDataRoot : dataDir));
+  ipcMain.handle("desktop:open-data", () => shell.openPath(dataDir));
+  ipcMain.handle("desktop:open-wiki", () => shell.openPath(configuredWikiRoot));
   ipcMain.handle("desktop:open-logs", () => shell.openPath(logPath));
   ipcMain.handle("desktop:open-web-client", () => shell.openExternal(clientUrl));
   ipcMain.handle("desktop:copy-guide", () => {
@@ -362,6 +364,34 @@ function registerDesktopHandlers() {
   ipcMain.handle("desktop:get-auto-launch", () => getAutoLaunchState());
   ipcMain.handle("desktop:set-auto-launch", (_event, enabled) =>
     setAutoLaunch(Boolean(enabled)));
+  ipcMain.handle("desktop:workspace", () => getDesktopWorkspaceState());
+  ipcMain.handle("desktop:open-obsidian", async () => {
+    const obsidian = getObsidianState(configuredWikiRoot);
+    if (!obsidian.installed) {
+      throw new Error("Obsidian이 설치되어 있지 않습니다.");
+    }
+    if (!obsidian.vaultRegistered) {
+      await shell.openPath(configuredWikiRoot);
+      if (obsidian.protocolRegistered) await shell.openExternal("obsidian://open");
+      else if (obsidian.executablePath) await shell.openPath(obsidian.executablePath);
+      workspaceStateCache = null;
+      return { opened: false, needsVaultRegistration: true };
+    }
+    await shell.openExternal(makeObsidianOpenUri(configuredWikiRoot));
+    return { opened: true, needsVaultRegistration: false };
+  });
+}
+
+function getDesktopWorkspaceState() {
+  if (workspaceStateCache && Date.now() - workspaceStateCache.createdAt < 5000) {
+    return workspaceStateCache.value;
+  }
+  const value = {
+    git: getWikiGitState(configuredWikiRoot),
+    obsidian: getObsidianState(configuredWikiRoot),
+  };
+  workspaceStateCache = { createdAt: Date.now(), value };
+  return value;
 }
 
 function getAutoLaunchState() {

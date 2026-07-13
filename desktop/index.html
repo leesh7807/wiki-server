@@ -102,8 +102,16 @@
           <p class="lead">외부 저장소는 HTTP 계약을 통해 자료를 전달하고, 위키의 실제 파일과 작업 기록은 로컬에 남습니다.</p>
         </div>
         <div class="info-grid">
-          <article class="paper info-card"><p class="eyebrow">Wiki root</p><p id="wikiRoot" class="path-value">—</p><span id="wikiSource" class="quiet-badge">—</span></article>
-          <article class="paper info-card"><p class="eyebrow">Runtime data</p><p id="dataRoot" class="path-value">—</p><button id="openDataButton" class="text-button">Open data folder</button></article>
+          <article class="paper info-card">
+            <p class="eyebrow">Operational wiki</p><p id="wikiRoot" class="path-value">—</p><span id="wikiSource" class="quiet-badge">—</span>
+            <div class="button-row"><button id="openWikiButton" class="text-button">Open wiki folder</button><button id="openObsidianButton" class="text-button">Open in Obsidian</button></div>
+            <p id="obsidianStatus" class="setting-message left-message"></p>
+          </article>
+          <article class="paper info-card"><p class="eyebrow">Runtime data</p><p id="dataRoot" class="path-value">—</p><button id="openDataButton" class="text-button">Open runtime folder</button></article>
+          <article class="paper info-card wide-card">
+            <p class="eyebrow">Local version history</p>
+            <div class="git-summary"><div><span>Branch</span><strong id="gitBranch">—</strong></div><div><span>HEAD</span><strong id="gitHead">—</strong></div><div><span>Commits</span><strong id="gitCommits">—</strong></div><div><span>State</span><strong id="gitState">—</strong></div></div>
+          </article>
         </div>
         <article class="paper integration-card">
           <div><p class="eyebrow">Repository integration</p><h3>다른 저장소에서 전달하기</h3></div>

@@ -1,5 +1,5 @@
 const api = window.wikiDesktop;
-const state = { command: "query", health: null, metrics: null, selectedJobId: "", selectedJob: null };
+const state = { command: "query", health: null, metrics: null, workspace: null, selectedJobId: "", selectedJob: null };
 const views = {
   work: ["Work", "Compose and run"],
   activity: ["Activity", "Queue and outcomes"],
@@ -14,6 +14,8 @@ document.getElementById("submitCommand").addEventListener("click", submit);
 document.getElementById("refreshButton").addEventListener("click", refresh);
 document.getElementById("cancelButton").addEventListener("click", cancelSelected);
 document.getElementById("openDataButton").addEventListener("click", () => api.openData());
+document.getElementById("openWikiButton").addEventListener("click", () => api.openWiki());
+document.getElementById("openObsidianButton").addEventListener("click", openObsidian);
 document.getElementById("openLogsButton").addEventListener("click", () => api.openLogs());
 document.getElementById("openWebClientButton").addEventListener("click", () => api.openWebClient());
 document.getElementById("autoLaunchToggle").addEventListener("change", updateAutoLaunch);
@@ -82,9 +84,10 @@ async function cancelSelected() {
 
 async function refresh() {
   try {
-    const [health, metrics] = await Promise.all([api.health(), api.metrics()]);
+    const [health, metrics, workspace] = await Promise.all([api.health(), api.metrics(), api.workspace()]);
     state.health = health;
     state.metrics = metrics;
+    state.workspace = workspace;
     setConnected(true);
     const current = metrics.current?.running || metrics.current?.queued?.[0];
     if (current) state.selectedJobId = current.id;
@@ -109,6 +112,7 @@ function render() {
   renderMetrics();
   renderResult();
   renderWiki();
+  renderWorkspace();
   renderProfiles();
 }
 
@@ -182,6 +186,31 @@ function renderWiki() {
   const warning = document.getElementById("portWarning");
   warning.hidden = !desktop.portWarning;
   warning.textContent = desktop.portWarning || "";
+}
+
+function renderWorkspace() {
+  const git = state.workspace?.git || {};
+  document.getElementById("gitBranch").textContent = git.available ? git.branch : "Unavailable";
+  document.getElementById("gitHead").textContent = git.available ? git.head : "—";
+  document.getElementById("gitCommits").textContent = git.available ? String(git.commitCount) : "—";
+  document.getElementById("gitState").textContent = git.available ? (git.clean ? "Clean" : `${git.changeCount} changes`) : "Unavailable";
+  const obsidian = state.workspace?.obsidian || {};
+  const button = document.getElementById("openObsidianButton");
+  button.disabled = !obsidian.installed;
+  button.textContent = obsidian.vaultRegistered ? "Open index in Obsidian" : obsidian.installed ? "Set up Obsidian vault" : "Obsidian not installed";
+  document.getElementById("obsidianStatus").textContent = obsidian.message || "";
+}
+
+async function openObsidian() {
+  const message = document.getElementById("obsidianStatus");
+  try {
+    const result = await api.openObsidian();
+    message.textContent = result.needsVaultRegistration
+      ? "Obsidian에서 열린 운영 위키 폴더를 ‘Open folder as vault’로 등록하세요."
+      : "Obsidian에서 index.md를 열었습니다.";
+  } catch (error) {
+    message.textContent = error.message || String(error);
+  }
 }
 
 function renderProfiles() {

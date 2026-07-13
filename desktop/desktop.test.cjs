@@ -25,6 +25,14 @@ test("desktop renderer exposes port warnings and the copyable repository guide",
   assert.match(app, /api\.copyGuide/);
 });
 
+test("wiki view exposes operational paths, Git state, and Obsidian integration", () => {
+  for (const id of ["openWikiButton", "openDataButton", "openObsidianButton", "gitHead", "gitState"]) {
+    assert.match(html, new RegExp(`id="${id}"`));
+  }
+  assert.match(app, /api\.workspace\(\)/);
+  assert.match(app, /api\.openObsidian\(\)/);
+});
+
 test("desktop settings expose background launch at Windows login", () => {
   assert.match(html, /id="autoLaunchToggle"/);
   assert.match(app, /api\.getAutoLaunch\(\)/);
