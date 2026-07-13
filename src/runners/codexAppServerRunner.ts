@@ -4,8 +4,8 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
-import { formatJobInput } from "./commandInput.js";
-import type { Job, JobError, RunningProcess, RunnerResult } from "./types.js";
+import { formatJobInput } from "../jobs/jobCommand.js";
+import type { Job, JobError, RunningProcess, RunnerResult } from "../jobs/jobTypes.js";
 
 const STDERR_TAIL_LIMIT = 16_384;
 const START_TIMEOUT_MS = 20_000;
@@ -909,7 +909,6 @@ function makeThreadStartParams(
     serviceName,
     ephemeral: true,
     experimentalRawEvents: false,
-    persistExtendedHistory: false,
   };
 
   if (options.model) {

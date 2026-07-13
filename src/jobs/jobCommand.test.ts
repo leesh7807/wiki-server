@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { formatJobInput, parseCommandContent } from "./commandInput.js";
+import { formatJobInput, parseCommandContent } from "./jobCommand.js";
 
 test("formats empty lint command without a trailing argument", () => {
   assert.equal(formatJobInput("lint", ""), "/lint");

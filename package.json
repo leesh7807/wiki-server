@@ -7,7 +7,7 @@
   "main": "tray/main.cjs",
   "type": "module",
   "engines": {
-    "node": ">=22"
+    "node": ">=24.15 <25"
   },
   "scripts": {
     "dev": "tsx src/server.ts",
@@ -15,8 +15,8 @@
     "make-icon": "node tray/make-icon.cjs",
     "start": "node dist/src/server.js",
     "typecheck": "tsc --noEmit",
-    "test": "node --test tray/auto-launch.test.cjs tray/port-selection.test.cjs tray/integration-guide.test.cjs tray/wiki-repository.test.cjs tray/wiki-workspace.test.cjs desktop/desktop.test.cjs && tsx --test src/agentRunner.test.ts src/appServerRunner.test.ts src/appServerProtocol.test.ts src/clientHtml.test.ts src/commandInput.test.ts src/config.test.ts src/serverStartup.test.ts src/jobStore.test.ts",
-    "test:integration": "tsx --test src/appServerRunner.integration.test.ts",
+    "test": "node --test tray/system/auto-launch.test.cjs tray/server/codex-command.test.cjs tray/server/port-selection.test.cjs tray/server/integration-guide.test.cjs tray/wiki-repository.test.cjs tray/wiki/wiki-installation.test.cjs tray/wiki/wiki-workspace.test.cjs desktop/desktop.test.cjs && tsx --test src/architecture.test.ts src/runners/agentRunner.test.ts src/runners/codexAppServerRunner.test.ts src/runners/codexAppServerProtocol.test.ts src/runners/codexExecRunner.test.ts src/runners/codexVersion.test.ts src/http/clientHtml.test.ts src/http/wikiHttpServer.test.ts src/jobs/jobCommand.test.ts src/config/wikiServerConfig.test.ts src/http/serverStartup.test.ts src/jobs/jobStore.test.ts",
+    "test:integration": "tsx --test src/runners/codexAppServerRunner.integration.test.ts",
     "build": "tsc",
     "prepare:wiki-seed": "node tray/prepare-wiki-seed.cjs",
     "app:pack": "npm run build && npm run prepare:wiki-seed && electron-builder --dir",

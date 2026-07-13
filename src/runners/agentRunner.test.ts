@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { AgentRunner, type AppServerManagerLike } from "./agentRunner.js";
-import type { Job, RunnerResult, RunningProcess } from "./types.js";
+import type { Job, RunnerResult, RunningProcess } from "../jobs/jobTypes.js";
 
 const baseOptions = {
   mode: "app-server" as const,
   codexBin: "codex",
+  codexVersion: "codex-cli 1.2.3",
   wikiRoot: process.cwd(),
   appServerCodexHome: process.cwd(),
   warmupEnabled: true,
@@ -257,6 +258,54 @@ test("failed warmup retries app-server in the background before restoring app jo
   );
 });
 
+test("upgrade-required warmup failures do not retry through exec", async () => {
+  const events: unknown[] = [];
+  let execStartCount = 0;
+  const runner = new AgentRunner(baseOptions, {
+    appServer: fakeAppServer({
+      warmUp: async () => ({
+        ok: false,
+        error: {
+          message: "Codex app-server warmup failed",
+          stderrTail: "gpt-5.6-terra requires a newer version of Codex",
+        },
+      }),
+    }),
+    startExecJob: () => {
+      execStartCount += 1;
+      return completedProcess({ ok: true, result: {} });
+    },
+  });
+
+  await runner.warmUp();
+  const result = await runner.startJob(makeJob("query"), {
+    onAgentEvent: (event) => events.push(event),
+  }).done;
+  const status = runner.status();
+
+  assert.equal(execStartCount, 0);
+  assert.deepEqual(result, {
+    ok: false,
+    error: { message: "Codex app-server warmup failed" },
+  });
+  assert.equal(status.codexVersion, "codex-cli 1.2.3");
+  assert.equal(status.protocolReady, true);
+  assert.equal(status.modelReady, false);
+  assert.equal(
+    (status.warmup as { failureKind?: string }).failureKind,
+    "codex_upgrade_required",
+  );
+  assert.equal(
+    events.some((event) =>
+      typeof event === "object" &&
+      event !== null &&
+      "type" in event &&
+      event.type === "runner_fallback_suppressed",
+    ),
+    true,
+  );
+});
+
 test("jobs use exec while background warmup retry is still running", async () => {
   let appStartCount = 0;
   let execStartCount = 0;
@@ -353,6 +402,34 @@ test("pre-turn app-server failures refresh temporary exec fallback", async () =>
   assert.deepEqual(first, { ok: true, result: { lastAgentMessage: "exec-ok" } });
   assert.deepEqual(second, { ok: true, result: { lastAgentMessage: "exec-ok" } });
   assert.equal((runner.status().warmup as { status: string }).status, "failed");
+});
+
+test("upgrade-required pre-turn failures do not retry through exec", async () => {
+  let execStartCount = 0;
+  const failure = {
+    ok: false as const,
+    error: { message: "model requires newer Codex; please update Codex" },
+  };
+  const runner = new AgentRunner(baseOptions, {
+    appServer: fakeAppServer({
+      startJob: () => ({
+        done: Promise.resolve(failure),
+        cancel: () => undefined,
+        canFallbackAfterFailure: () => true,
+      }),
+    }),
+    startExecJob: () => {
+      execStartCount += 1;
+      return completedProcess({ ok: true, result: {} });
+    },
+  });
+
+  const result = await runner.startJob(makeJob("query"), {
+    onAgentEvent: () => undefined,
+  }).done;
+
+  assert.equal(execStartCount, 0);
+  assert.deepEqual(result, failure);
 });
 
 test("disabled startup warmup still allows background recovery after app-server failure", async () => {
@@ -473,6 +550,7 @@ test("selects a model for each command on app-server and exec paths", async () =
   const execModels: Array<string | undefined> = [];
   const appEfforts: Array<string | undefined> = [];
   const execEfforts: Array<string | undefined> = [];
+  const execCodexHomes: string[] = [];
   const appRunner = new AgentRunner(
     {
       ...baseOptions,
@@ -521,6 +599,7 @@ test("selects a model for each command on app-server and exec paths", async () =
       startExecJob: (_job, options) => {
         execModels.push(options.model);
         execEfforts.push(options.reasoningEffort);
+        execCodexHomes.push(options.codexHome);
         return completedProcess({ ok: true, result: {} });
       },
     },
@@ -534,6 +613,7 @@ test("selects a model for each command on app-server and exec paths", async () =
   assert.deepEqual(execModels, ["query-model", "ingest-model", "lint-model"]);
   assert.deepEqual(appEfforts, ["low", "medium", "high"]);
   assert.deepEqual(execEfforts, ["low", "medium", "high"]);
+  assert.deepEqual(execCodexHomes, [process.cwd(), process.cwd(), process.cwd()]);
 });
 
 function fakeAppServer(overrides: Partial<AppServerManagerLike>): AppServerManagerLike {

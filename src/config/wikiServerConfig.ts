@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
-import type { JobCommand } from "./types.js";
+import type { JobCommand } from "../jobs/jobTypes.js";
 
 const DEFAULT_CODEX_MODELS: WikiCommandModels = {
   query: "gpt-5.6-terra",
@@ -35,6 +35,10 @@ export function findPackageRoot(startDir: string) {
 
 export type WikiCommandModels = Record<JobCommand, string>;
 export type WikiCommandReasoningEfforts = Record<JobCommand, string>;
+
+export function resolveCodexCommand(env: NodeJS.ProcessEnv = process.env) {
+  return optionalString(env.CODEX_BIN) ?? "codex";
+}
 
 export function resolveWikiCommandModels(
   env: NodeJS.ProcessEnv = process.env,

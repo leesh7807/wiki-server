@@ -20,10 +20,26 @@ Job logs are observability, not durable wiki knowledge. A job transcript should
 be promoted into the wiki only through an explicit ingest or curated operating
 note.
 
-Agent control follows the same boundary logic. User decision surfaces are mainly
-about hidden or irreversible choices; visible, bounded, replaceable, verified
-choices stay on the agent execution surface. The enforceable core is in
-`AGENTS.md`, with details in `docs/agent-control-and-continuous-slices.md`.
+## Code Boundaries
+
+The standalone runtime uses domain-oriented modules under `src/`:
+
+- `config/` resolves environment, paths, and command profiles.
+- `jobs/` owns command framing, job state, persistence, observability metrics,
+  and the shared job contract.
+- `runners/` adapts Codex app-server and exec transports and owns fallback
+  policy.
+- `http/` owns routes, SSE replay/live delivery, response shapes, and the
+  compatibility client.
+- `server.ts` is the composition root for process startup and shutdown.
+
+Dependencies flow from the composition root into domains, and from transport
+adapters toward the `jobs/` contract. The jobs domain never imports HTTP,
+Electron, or a concrete runner. The Electron side follows the same pattern:
+`tray/main.cjs` composes modules grouped under `tray/server/`, `tray/system/`,
+and `tray/wiki/`, while `desktop/` remains the replaceable renderer.
+
+See `docs/code-map.md` for the change-routing table and extraction criteria.
 
 ## Legacy Baseline Versus Design Boundary
 
@@ -33,11 +49,9 @@ client integration behavior are the compatibility surface. Internal structure,
 module boundaries, runner plumbing, observability storage, and harness wiring
 are editable surfaces for this repository.
 
-During migration, agents should not treat copied files as untouchable legacy
-code. Refactor or replace internal pieces when it improves server ownership,
-testability, observability, or maintainability and the slice remains visible,
-bounded, replaceable, and verified. The temporary rule belongs in `AGENTS.md`
-only while imported code still risks being mistaken for protected design.
+The imported internal structure remains editable. Refactor or replace internal
+pieces when it improves server ownership, testability, observability, or
+maintainability while preserving the public HTTP compatibility surface.
 
 ## Runtime Paths
 
@@ -63,7 +77,13 @@ stored in `.cache/wiki-server/` in this repository:
 
 The default runner starts `codex app-server` and submits each command as an
 ephemeral thread/turn. If app-server fails before a turn starts, the server can
-fall back to `codex exec --json --ephemeral`.
+fall back to `codex exec --json --ephemeral`. Both transports use the same
+isolated `WIKI_CODEX_HOME`; fallback must not read a user's global Codex cache.
+The executable is the standalone Codex CLI selected by `CODEX_BIN`, or `codex`
+from PATH. Store-app internal and versioned binary paths are not runtime
+dependencies.
+An error that explicitly requires a newer Codex version is returned directly
+instead of retrying through a transport that uses the same incompatible binary.
 
 The public integration contract remains HTTP. The Codex app-server WebSocket is
 an internal runner channel, not the external client API.
@@ -78,7 +98,8 @@ fallback, while `WIKI_CODEX_QUERY_MODEL`, `WIKI_CODEX_INGEST_MODEL`, and
 `WIKI_CODEX_LINT_MODEL` independently select a model for each workflow. The
 same resolved selection is passed to app-server and exec fallback jobs. Warmup
 uses the query model as a lightweight runner readiness probe; it is not a
-three-model compatibility check.
+three-model compatibility check. Health output separates app-server protocol
+readiness from model readiness and includes the detected Codex CLI version.
 
 Reasoning effort follows the same command-scoped pattern through
 `WIKI_CODEX_REASONING_EFFORT` and the `WIKI_CODEX_<COMMAND>_REASONING_EFFORT`

@@ -7,9 +7,9 @@ import test from "node:test";
 import {
   APP_SERVER_SANDBOX_DANGER_FULL_ACCESS,
   APP_SERVER_SANDBOX_READ_ONLY,
-} from "./appServerRunner.js";
+} from "./codexAppServerRunner.js";
 
-const codexBin = process.env.CODEX_BIN ?? defaultCodexBin();
+const codexBin = process.env.CODEX_BIN?.trim() || "codex";
 const codexAvailable = canRunCodex(codexBin);
 
 test(
@@ -64,8 +64,7 @@ test(
         "config?: { [key in string]?: JsonValue } | null",
         "serviceName?: string | null",
         "ephemeral?: boolean | null",
-        "experimentalRawEvents: boolean",
-        "persistExtendedHistory: boolean",
+        "experimentalRawEvents?: boolean",
       ]);
       assertGeneratedContains(generated.turnStart, [
         "threadId: string",
@@ -119,19 +118,12 @@ test(
   },
 );
 
-function defaultCodexBin() {
-  if (process.platform === "win32" && process.env.LOCALAPPDATA) {
-    return path.join(process.env.LOCALAPPDATA, "OpenAI", "Codex", "bin", "codex.exe");
-  }
-
-  return "codex";
-}
-
 function canRunCodex(command: string) {
   const result = spawnSync(command, ["--version"], {
     encoding: "utf8",
     timeout: 10_000,
     windowsHide: true,
+    shell: process.platform === "win32" && !command.toLowerCase().endsWith(".exe"),
   });
   return !result.error && result.status === 0;
 }

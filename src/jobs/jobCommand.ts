@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { JobCommand } from "./types.js";
+import type { JobCommand } from "./jobTypes.js";
 
 const contentBodySchema = z.object({
   content: z.string().min(1),

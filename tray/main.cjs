@@ -14,10 +14,16 @@ const fs = require("node:fs");
 const http = require("node:http");
 const os = require("node:os");
 const path = require("node:path");
-const { createAutoLaunch } = require("./auto-launch.cjs");
-const { makeIntegrationGuide } = require("./integration-guide.cjs");
-const { parseAppPort, selectServerPort } = require("./port-selection.cjs");
-const { getObsidianState, getWikiGitState, makeObsidianOpenUri } = require("./wiki-workspace.cjs");
+const { createAutoLaunch } = require("./system/auto-launch.cjs");
+const { makeIntegrationGuide } = require("./server/integration-guide.cjs");
+const { resolveCodexCommand } = require("./server/codex-command.cjs");
+const { parseAppPort, selectServerPort } = require("./server/port-selection.cjs");
+const {
+  getObsidianState,
+  getWikiGitState,
+  makeObsidianOpenUri,
+} = require("./wiki/wiki-workspace.cjs");
+const { ensurePackagedWikiRoot } = require("./wiki/wiki-installation.cjs");
 
 const packageRoot = path.resolve(__dirname, "..");
 const packagedDataRoot = path.join(
@@ -66,9 +72,7 @@ const serverArgs = app.isPackaged
   ? [serverEntryPath]
   : [tsxCliPath, serverEntryPath];
 const serverProcessCwd = app.isPackaged ? configuredWikiRoot : packageRoot;
-const defaultCodexBin = process.platform === "win32" && process.env.LOCALAPPDATA
-  ? path.join(process.env.LOCALAPPDATA, "OpenAI", "Codex", "bin", "codex.exe")
-  : "codex";
+const codexCommand = resolveCodexCommand();
 const iconPath = path.join(packageRoot, "tray", "icon.ico");
 const fallbackIconPath = path.join(packageRoot, "tray", "icon.svg");
 const autoLaunch = createAutoLaunch({
@@ -104,7 +108,14 @@ app.whenReady().then(async () => {
   port = portSelection.port;
   portWarning = portSelection.warning;
   updateServerUrls();
-  ensurePackagedWikiRoot();
+  if (app.isPackaged && !process.env.WIKI_ROOT) {
+    ensurePackagedWikiRoot({
+      contentSeed: path.join(process.resourcesPath, "wiki-root-seed"),
+      dataRoot: packagedDataRoot,
+      gitSeed: path.join(process.resourcesPath, "wiki-git-seed"),
+      wikiRoot: managedWikiRoot,
+    });
+  }
   fs.mkdirSync(logDir, { recursive: true });
   registerDesktopHandlers();
 
@@ -157,7 +168,7 @@ async function startServer() {
       WIKI_SERVER_DATA_DIR: dataDir,
       HOST: host,
       PORT: port,
-      CODEX_BIN: process.env.CODEX_BIN || defaultCodexBin,
+      CODEX_BIN: codexCommand,
     },
     windowsHide: true,
   });
@@ -403,66 +414,6 @@ function showMainWindow() {
 
 function openClient() {
   showMainWindow();
-}
-
-function ensurePackagedWikiRoot() {
-  if (!app.isPackaged || process.env.WIKI_ROOT) return;
-
-  const seed = path.join(process.resourcesPath, "wiki-root-seed");
-  const staging = path.join(packagedDataRoot, "wiki-root.initializing");
-  if (!fs.existsSync(managedWikiRoot)) {
-    if (!fs.existsSync(seed)) {
-      throw new Error(`Packaged wiki seed is missing: ${seed}`);
-    }
-
-    fs.mkdirSync(packagedDataRoot, { recursive: true });
-    fs.rmSync(staging, { recursive: true, force: true });
-    fs.cpSync(seed, staging, { recursive: true });
-    ensureWikiDirectories(staging);
-    for (const required of ["AGENTS.md", "index.md", "log.md", "wiki"]) {
-      if (!fs.existsSync(path.join(staging, required))) {
-        throw new Error(`Packaged wiki seed is incomplete: missing ${required}`);
-      }
-    }
-    fs.renameSync(staging, managedWikiRoot);
-  }
-
-  ensureWikiDirectories(managedWikiRoot);
-  ensurePackagedWikiGitRepository();
-}
-
-function ensureWikiDirectories(wikiRoot) {
-  for (const directory of [
-    "exports",
-    "inbox",
-    "raw/assets",
-    "raw/sources",
-    "tools",
-    "wiki/concepts",
-    "wiki/decisions",
-    "wiki/entities",
-    "wiki/maps",
-    "wiki/projects",
-    "wiki/sources",
-  ]) {
-    const directoryPath = path.join(wikiRoot, directory);
-    const keepPath = path.join(directoryPath, ".gitkeep");
-    fs.mkdirSync(directoryPath, { recursive: true });
-    if (!fs.existsSync(keepPath)) {
-      fs.writeFileSync(keepPath, "");
-    }
-  }
-}
-
-function ensurePackagedWikiGitRepository() {
-  const target = path.join(managedWikiRoot, ".git");
-  if (fs.existsSync(target)) return;
-
-  const gitSeed = path.join(process.resourcesPath, "wiki-git-seed");
-  if (!fs.existsSync(gitSeed)) {
-    throw new Error(`Packaged wiki Git history is missing: ${gitSeed}`);
-  }
-  fs.cpSync(gitSeed, target, { recursive: true });
 }
 
 function appendLog(chunk) {

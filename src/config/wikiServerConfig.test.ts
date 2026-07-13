@@ -4,11 +4,17 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import {
+  resolveCodexCommand,
   resolveWikiCommandModels,
   resolveWikiCommandReasoningEfforts,
   resolveWikiServerPaths,
   findPackageRoot,
-} from "./config.js";
+} from "./wikiServerConfig.js";
+
+test("uses an explicit Codex CLI path before the PATH command", () => {
+  assert.equal(resolveCodexCommand({}), "codex");
+  assert.equal(resolveCodexCommand({ CODEX_BIN: " C:\\tools\\codex.cmd " }), "C:\\tools\\codex.cmd");
+});
 
 test("command models use the shared model default", () => {
   assert.deepEqual(resolveWikiCommandModels({}), {

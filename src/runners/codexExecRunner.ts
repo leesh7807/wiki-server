@@ -1,13 +1,14 @@
 import { spawn, spawnSync } from "node:child_process";
 import { StringDecoder } from "node:string_decoder";
-import { formatJobInput } from "./commandInput.js";
-import type { Job, JobError, RunningProcess, RunnerResult } from "./types.js";
+import { formatJobInput } from "../jobs/jobCommand.js";
+import type { Job, JobError, RunningProcess, RunnerResult } from "../jobs/jobTypes.js";
 
 const STDERR_TAIL_LIMIT = 16_384;
 
 export type CodexRunnerOptions = {
   codexBin: string;
   wikiRoot: string;
+  codexHome: string;
   model?: string;
   reasoningEffort?: string;
   onAgentEvent: (event: unknown) => void;
@@ -38,6 +39,7 @@ export function startCodexJob(
 
   const child = spawn(options.codexBin, args, {
     cwd: options.wikiRoot,
+    env: makeCodexEnvironment(options.codexHome),
     stdio: ["pipe", "pipe", "pipe"],
     shell: process.platform === "win32" && !options.codexBin.toLowerCase().endsWith(".exe"),
   });
@@ -152,6 +154,16 @@ export function startCodexJob(
         child.kill();
       }
     },
+  };
+}
+
+export function makeCodexEnvironment(
+  codexHome: string,
+  baseEnvironment: NodeJS.ProcessEnv = process.env,
+): NodeJS.ProcessEnv {
+  return {
+    ...baseEnvironment,
+    CODEX_HOME: codexHome,
   };
 }
 

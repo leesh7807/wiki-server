@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { JobStore } from "./jobStore.js";
-import type { Job, JobEvent, RunnerResult, StoredJob } from "./types.js";
+import type { Job, JobEvent, RunnerResult, StoredJob } from "./jobTypes.js";
 
 test("job event persistence is serialized under bursty agent events", async () => {
   const jobsDir = mkdtempSync(path.join(os.tmpdir(), "wiki-server-job-store-"));

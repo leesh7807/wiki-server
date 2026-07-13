@@ -4,8 +4,8 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { CodexAppServerManager } from "./appServerRunner.js";
-import type { Job } from "./types.js";
+import { CodexAppServerManager } from "./codexAppServerRunner.js";
+import type { Job } from "../jobs/jobTypes.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -32,7 +32,7 @@ test(
       writeFileSync(path.join(wikiRoot, "index.md"), "# Test Wiki\n");
 
       const commonOptions = {
-        codexBin: process.env.CODEX_BIN ?? defaultCodexBin(),
+        codexBin: process.env.CODEX_BIN?.trim() || "codex",
         wikiRoot,
         codexHome,
         model:
@@ -66,14 +66,6 @@ test(
     }
   },
 );
-
-function defaultCodexBin() {
-  if (process.platform === "win32" && process.env.LOCALAPPDATA) {
-    return path.join(process.env.LOCALAPPDATA, "OpenAI", "Codex", "bin", "codex.exe");
-  }
-
-  return "codex";
-}
 
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
   let timer: NodeJS.Timeout | undefined;

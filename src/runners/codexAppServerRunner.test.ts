@@ -3,8 +3,8 @@ import { mkdtempSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { CodexAppServerManager } from "./appServerRunner.js";
-import type { Job, RunnerResult } from "./types.js";
+import { CodexAppServerManager } from "./codexAppServerRunner.js";
+import type { Job, RunnerResult } from "../jobs/jobTypes.js";
 
 test("spawn error resolves the app-server job as a pre-turn failure", async () => {
   const codexHome = mkdtempSync(path.join(os.tmpdir(), "wiki-server-app-runner-test-"));

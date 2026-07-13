@@ -2,9 +2,9 @@ import path from "node:path";
 import {
   CodexAppServerManager,
   type CodexAppServerRunnerOptions,
-} from "./appServerRunner.js";
-import { startCodexJob } from "./codexRunner.js";
-import type { Job, JobCommand, RunnerResult, RunningProcess } from "./types.js";
+} from "./codexAppServerRunner.js";
+import { startCodexJob } from "./codexExecRunner.js";
+import type { Job, JobCommand, RunnerResult, RunningProcess } from "../jobs/jobTypes.js";
 
 const DEFAULT_WARMUP_FAILURE_FALLBACK_MS = 60_000;
 
@@ -13,6 +13,7 @@ export type AgentRunnerMode = "app-server" | "exec";
 export type AgentRunnerOptions = {
   mode: AgentRunnerMode;
   codexBin: string;
+  codexVersion?: string;
   wikiRoot: string;
   appServerCodexHome: string;
   appServerPort?: number;
@@ -48,6 +49,7 @@ type ExecRunnerStarter = (
   options: {
     codexBin: string;
     wikiRoot: string;
+    codexHome: string;
     model?: string;
     reasoningEffort?: string;
     onAgentEvent: (event: unknown) => void;
@@ -74,6 +76,7 @@ export class AgentRunner {
         finishedAt?: string;
         retryAfter?: string;
         error?: string;
+        failureKind?: "codex_upgrade_required";
       };
 
   constructor(
@@ -93,6 +96,10 @@ export class AgentRunner {
     if (this.warmupStatus.status === "failed") {
       const retryAfter = Date.parse(this.warmupStatus.retryAfter ?? "");
       const error = this.warmupStatus.error;
+      if (this.warmupStatus.failureKind === "codex_upgrade_required") {
+        hooks.onAgentEvent(makeFallbackSuppressedEvent(error));
+        return this.trackProcess(failedProcess(error ?? "Codex upgrade required"));
+      }
       if (Number.isFinite(retryAfter) && Date.now() >= retryAfter) {
         this.scheduleWarmupRetry();
       }
@@ -122,6 +129,10 @@ export class AgentRunner {
       });
     } catch (error) {
       this.markAppServerUnavailable(error);
+      if (isCodexUpgradeRequired(error)) {
+        hooks.onAgentEvent(makeFallbackSuppressedEvent(error));
+        return this.trackProcess(failedProcess(error));
+      }
       hooks.onAgentEvent(makeFallbackEvent(error));
       return this.trackProcess(this.startExecJob(job, hooks));
     }
@@ -135,6 +146,12 @@ export class AgentRunner {
         if (result.ok) {
           this.markAppServerRecovered();
         }
+        return result;
+      }
+
+      if (isCodexUpgradeRequired(result.error)) {
+        this.markAppServerUnavailable(result.error.message);
+        hooks.onAgentEvent(makeFallbackSuppressedEvent(result.error));
         return result;
       }
 
@@ -155,8 +172,10 @@ export class AgentRunner {
   }
 
   status() {
+    const appServer = this.appServer.status();
     return {
       mode: this.options.mode,
+      codexVersion: this.options.codexVersion,
       appServerCodexHome: path.resolve(this.options.appServerCodexHome),
       appServerPort: this.options.appServerPort,
       appServerModel: this.options.appServerModel,
@@ -164,7 +183,9 @@ export class AgentRunner {
       appServerReasoningEffort: this.options.appServerReasoningEffort,
       appServerReasoningEfforts: this.options.appServerReasoningEfforts,
       appServerServiceTier: this.options.appServerServiceTier,
-      appServer: this.appServer.status(),
+      protocolReady: readReadyStatus(appServer),
+      modelReady: this.modelReady(),
+      appServer,
       warmup: this.warmupStatus,
     };
   }
@@ -211,6 +232,9 @@ export class AgentRunner {
       finishedAt: new Date().toISOString(),
       retryAfter: new Date(Date.now() + this.warmupFailureFallbackMs()).toISOString(),
       error: result.error.message,
+      failureKind: isCodexUpgradeRequired(result.error)
+        ? "codex_upgrade_required"
+        : undefined,
     };
     return result;
   }
@@ -227,6 +251,7 @@ export class AgentRunner {
     return this.startExecRunner(job, {
       codexBin: this.options.codexBin,
       wikiRoot: this.options.wikiRoot,
+      codexHome: this.options.appServerCodexHome,
       model: this.modelFor(job.command),
       reasoningEffort: this.reasoningEffortFor(job.command),
       onAgentEvent: hooks.onAgentEvent,
@@ -256,6 +281,15 @@ export class AgentRunner {
     );
   }
 
+  private modelReady(): boolean | null {
+    if (this.options.mode !== "app-server" || this.warmupStatus.status === "disabled") {
+      return null;
+    }
+    if (this.warmupStatus.status === "succeeded") return true;
+    if (this.warmupStatus.status === "failed") return false;
+    return null;
+  }
+
   private scheduleWarmupRetry() {
     if (this.warmupRetry) return;
     this.warmupRetry = this.runWarmupProbe().finally(() => {
@@ -278,7 +312,8 @@ export class AgentRunner {
       startedAt: this.warmupStatus.status === "disabled" ? undefined : this.warmupStatus.startedAt,
       finishedAt: new Date().toISOString(),
       retryAfter: new Date(Date.now() + this.warmupFailureFallbackMs()).toISOString(),
-      error: reason instanceof Error ? reason.message : String(reason),
+      error: reasonMessage(reason),
+      failureKind: isCodexUpgradeRequired(reason) ? "codex_upgrade_required" : undefined,
     };
   }
 }
@@ -290,4 +325,56 @@ function makeFallbackEvent(reason: unknown) {
     to: "codex-exec",
     reason: reason instanceof Error ? reason.message : String(reason),
   };
+}
+
+function makeFallbackSuppressedEvent(reason: unknown) {
+  return {
+    type: "runner_fallback_suppressed",
+    from: "app-server",
+    reason: "codex_upgrade_required",
+    error: stringifyReason(reason),
+  };
+}
+
+function isCodexUpgradeRequired(reason: unknown) {
+  return /requires (?:a )?newer version of codex|requires newer codex|please update codex/i.test(
+    stringifyReason(reason),
+  );
+}
+
+function stringifyReason(reason: unknown): string {
+  if (reason instanceof Error) return `${reason.message}\n${reason.stack ?? ""}`;
+  if (typeof reason === "string") return reason;
+  try {
+    return JSON.stringify(reason);
+  } catch {
+    return String(reason);
+  }
+}
+
+function reasonMessage(reason: unknown): string {
+  if (reason instanceof Error) return reason.message;
+  if (reason && typeof reason === "object" && "message" in reason) {
+    const message = (reason as { message?: unknown }).message;
+    if (typeof message === "string") return message;
+  }
+  return typeof reason === "string" ? reason : stringifyReason(reason);
+}
+
+function failedProcess(reason: unknown): RunningProcess {
+  return {
+    done: Promise.resolve({
+      ok: false,
+      error: {
+        message: reasonMessage(reason),
+      },
+    }),
+    cancel: () => undefined,
+  };
+}
+
+function readReadyStatus(status: unknown): boolean | null {
+  if (!status || typeof status !== "object" || !("ready" in status)) return null;
+  const ready = (status as { ready?: unknown }).ready;
+  return typeof ready === "boolean" ? ready : null;
 }

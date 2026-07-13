@@ -77,19 +77,9 @@ $env:WIKI_CODEX_LINT_REASONING_EFFORT = "high"
 Do not remove the old implementation before the external server has passed the
 compatibility gate.
 
-## Retiring The Temporary AGENTS Rule
+## Retired Temporary AGENTS Rule
 
-`AGENTS.md` currently says that copied legacy server code is a compatibility
-baseline, not a protected design. Keep that rule while the external repo still
-contains large imported areas that agents may wrongly avoid changing.
-
-Move or shrink that rule out of `AGENTS.md` after:
-
-- The external server is the working default.
-- The old wiki-owned server has been removed or replaced with a pointer.
-- The architecture docs clearly define stable internal ownership boundaries.
-- Tests, build, and local smoke checks cover the replacement
-  boundaries that matter.
-
-After that point, the durable guidance belongs in architecture and maintenance
-docs, not in the high-pressure session-start contract.
+The temporary copied-code and migration posture was removed from `AGENTS.md`
+after the external repository gained explicit architecture boundaries, a code
+map, and boundary tests. Migration history remains in this document; it is no
+longer an agent execution rule.

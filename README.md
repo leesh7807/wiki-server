@@ -8,11 +8,10 @@ content lives only under `%LOCALAPPDATA%\Wiki Server\wiki-root` by default and
 has its own Git history. The tracked `wiki-template/` contains only the minimal
 directory and operating structure for a new installation.
 
-Agent work in this repository follows the continuous-slice rule in `AGENTS.md`:
-continue through recommended implementation slices when choices are visible,
-bounded, replaceable, and verified. Details are in
-`docs/agent-control-and-continuous-slices.md`; day-to-day module ownership and
-verification guidance is in `docs/code-quality.md`.
+Repository ownership, public integration, and security constraints are defined
+in `AGENTS.md`. Day-to-day module ownership and verification guidance is in
+`docs/code-quality.md`. Start code changes with `docs/code-map.md`, which routes
+behavior to its owning domain and records the dependency and reuse rules.
 
 ## Run
 
@@ -20,6 +19,9 @@ verification guidance is in `docs/code-quality.md`.
 npm install
 npm run dev
 ```
+
+Development is pinned to Node.js `24.15.0` through `.node-version`. With fnm,
+open a new shell in the repository or run `fnm use` before npm commands.
 
 Defaults:
 
@@ -30,7 +32,11 @@ Defaults:
   `..\wiki` during migration
 - Runtime data: `.cache/wiki-server`, or `WIKI_SERVER_DATA_DIR`
 - Jobs: `.cache/wiki-server/jobs`
+- Codex CLI: standalone `@openai/codex`; `CODEX_BIN` may provide an explicit
+  executable or command path, otherwise the server resolves `codex` from PATH
 - Codex home: `.cache/wiki-server/codex-home`, or `WIKI_CODEX_HOME`
+- Health diagnostics: detected Codex version plus separate protocol/model
+  readiness; both runner transports use the isolated Codex home
 - Runner: app-server first, or `WIKI_AGENT_RUNNER=exec`
 - Models: query defaults to `gpt-5.6-terra`; ingest and lint default to
   `gpt-5.6-sol`; `WIKI_CODEX_MODEL` is the shared fallback;

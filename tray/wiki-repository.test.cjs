@@ -7,12 +7,14 @@ const packageRoot = path.resolve(__dirname, "..");
 const packageConfig = JSON.parse(readFileSync(path.join(packageRoot, "package.json"), "utf8"));
 const gitignore = readFileSync(path.join(packageRoot, ".gitignore"), "utf8");
 const main = readFileSync(path.join(__dirname, "main.cjs"), "utf8");
+const installation = readFileSync(path.join(__dirname, "wiki", "wiki-installation.cjs"), "utf8");
 
 test("server tracks only a minimal wiki template", () => {
   assert.doesNotMatch(gitignore, /^\/wiki-template\/$/m);
   assert.equal(existsSync(path.join(packageRoot, "wiki-root")), false);
   assert.match(main, /wiki-git-seed/);
-  assert.match(main, /ensurePackagedWikiGitRepository/);
+  assert.match(main, /ensurePackagedWikiRoot/);
+  assert.match(installation, /ensureWikiGitRepository/);
   for (const directory of ["exports", "inbox", "raw/assets", "raw/sources", "wiki/concepts", "wiki/decisions", "wiki/entities", "wiki/maps", "wiki/projects", "wiki/sources"]) {
     assert.equal(statSync(path.join(packageRoot, "wiki-template", directory, ".gitkeep")).size, 0);
   }
