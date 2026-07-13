@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Wiki Server</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">W</div>
+        <div>
+          <p class="eyebrow">Local knowledge</p>
+          <h1>Wiki Server</h1>
+        </div>
+      </div>
+      <nav aria-label="주요 화면">
+        <button class="nav-item active" data-view="work"><span>01</span> Work</button>
+        <button class="nav-item" data-view="activity"><span>02</span> Activity</button>
+        <button class="nav-item" data-view="wiki"><span>03</span> Wiki</button>
+        <button class="nav-item" data-view="settings"><span>04</span> Settings</button>
+      </nav>
+      <div class="sidebar-foot">
+        <span id="connectionDot" class="connection-dot"></span>
+        <div><strong id="connectionLabel">Connecting</strong><small id="connectionEndpoint">127.0.0.1:55173</small></div>
+      </div>
+    </aside>
+
+    <main>
+      <header class="topbar">
+        <div>
+          <p id="viewKicker" class="eyebrow">Compose and run</p>
+          <h2 id="viewTitle">Work</h2>
+        </div>
+        <div class="run-summary">
+          <span id="activeStatus" class="status-chip">Idle</span>
+          <button id="refreshButton" class="icon-button" title="새로고침" aria-label="새로고침">↻</button>
+        </div>
+      </header>
+      <div id="portWarning" class="port-warning" hidden></div>
+
+      <section id="workView" class="view active">
+        <div class="work-grid">
+          <article class="paper compose-card">
+            <div class="section-heading">
+              <div><p class="eyebrow">New work</p><h3>위키에 작업 보내기</h3></div>
+              <span id="commandProfile" class="profile-note">model loading</span>
+            </div>
+            <div class="command-tabs" role="radiogroup" aria-label="명령 선택">
+              <button class="command-tab active" data-command="query" role="radio" aria-checked="true">Query<small>근거 기반 조회</small></button>
+              <button class="command-tab" data-command="ingest" role="radio" aria-checked="false">Ingest<small>지식 보존·컴파일</small></button>
+              <button class="command-tab" data-command="lint" role="radio" aria-checked="false">Lint<small>전체 위키 감사</small></button>
+            </div>
+            <label id="composerLabel" for="composer">Question</label>
+            <textarea id="composer" placeholder="위키에서 확인할 질문을 입력하세요."></textarea>
+            <div id="lintNotice" class="lint-notice" hidden>
+              Lint는 범위를 받지 않습니다. 항상 전체 위키의 구조, 출처, 링크와 일관성을 감사합니다.
+            </div>
+            <div class="compose-actions">
+              <p id="composeMessage" class="message" role="status"></p>
+              <button id="submitCommand" class="primary-button">Run query <span>→</span></button>
+            </div>
+          </article>
+
+          <aside class="context-column">
+            <article class="paper compact-card">
+              <p class="eyebrow">Current run</p>
+              <div class="current-run-head"><h3 id="currentCommand">No active job</h3><span id="currentRunStatus">idle</span></div>
+              <p id="currentJobId" class="mono muted">Waiting for work</p>
+              <button id="cancelButton" class="text-button danger" disabled>Cancel current job</button>
+            </article>
+            <article class="paper compact-card">
+              <p class="eyebrow">Today at a glance</p>
+              <div id="miniMetrics" class="mini-metrics"></div>
+            </article>
+          </aside>
+        </div>
+        <article class="paper result-card">
+          <div class="section-heading"><div><p class="eyebrow">Latest result</p><h3 id="resultTitle">결과가 여기에 표시됩니다</h3></div></div>
+          <pre id="resultOutput" class="result-output">아직 실행된 작업이 없습니다.</pre>
+        </article>
+      </section>
+
+      <section id="activityView" class="view">
+        <div id="metricCards" class="metric-grid"></div>
+        <article class="paper activity-card">
+          <div class="section-heading"><div><p class="eyebrow">Live queue</p><h3>작업 흐름</h3></div></div>
+          <div id="queueList" class="queue-list"></div>
+        </article>
+        <article class="paper activity-card">
+          <div class="section-heading"><div><p class="eyebrow">Selected job</p><h3>작업 상세</h3></div></div>
+          <pre id="jobDetail" class="job-detail">선택된 작업이 없습니다.</pre>
+        </article>
+      </section>
+
+      <section id="wikiView" class="view">
+        <div class="wiki-hero paper">
+          <p class="eyebrow">Owned knowledge root</p>
+          <h3>이 앱이 위키와 실행 기록을 함께 관리합니다.</h3>
+          <p class="lead">외부 저장소는 HTTP 계약을 통해 자료를 전달하고, 위키의 실제 파일과 작업 기록은 로컬에 남습니다.</p>
+        </div>
+        <div class="info-grid">
+          <article class="paper info-card"><p class="eyebrow">Wiki root</p><p id="wikiRoot" class="path-value">—</p><span id="wikiSource" class="quiet-badge">—</span></article>
+          <article class="paper info-card"><p class="eyebrow">Runtime data</p><p id="dataRoot" class="path-value">—</p><button id="openDataButton" class="text-button">Open data folder</button></article>
+        </div>
+        <article class="paper integration-card">
+          <div><p class="eyebrow">Repository integration</p><h3>다른 저장소에서 전달하기</h3></div>
+          <div class="guide-block">
+            <pre id="integrationGuide">Loading integration guide…</pre>
+            <button id="copyGuideButton" class="secondary-button">Copy guide</button>
+            <span id="copyGuideStatus" class="muted"></span>
+          </div>
+        </article>
+      </section>
+
+      <section id="settingsView" class="view">
+        <article class="paper settings-card startup-card">
+          <div>
+            <p class="eyebrow">Background service</p>
+            <h3>Windows 로그인 시 자동 시작</h3>
+            <p class="lead compact-lead">컴퓨터를 켜고 로그인하면 창을 열지 않고 위키 서버와 트레이를 백그라운드에서 시작합니다.</p>
+          </div>
+          <div class="startup-control">
+            <label class="switch-row" for="autoLaunchToggle">
+              <input id="autoLaunchToggle" type="checkbox" role="switch">
+              <span class="switch-track" aria-hidden="true"><span></span></span>
+              <strong id="autoLaunchLabel">사용 안 함</strong>
+            </label>
+            <p id="autoLaunchMessage" class="setting-message" aria-live="polite"></p>
+          </div>
+        </article>
+        <article class="paper settings-card">
+          <div class="section-heading"><div><p class="eyebrow">Agent profiles</p><h3>명령별 실행 프로필</h3></div></div>
+          <div id="profileTable" class="profile-table"></div>
+        </article>
+        <article class="paper settings-card settings-actions">
+          <div><p class="eyebrow">Diagnostics</p><h3>앱 데이터와 호환 UI</h3></div>
+          <div><button id="openLogsButton" class="secondary-button">Open logs</button><button id="openWebClientButton" class="secondary-button">Open web client</button></div>
+        </article>
+      </section>
+    </main>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>

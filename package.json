@@ -1,0 +1,82 @@
+{
+  "name": "wiki-server",
+  "version": "0.2.6",
+  "description": "Local desktop agent server for an LLM-maintained wiki",
+  "author": "Wiki Server Contributors",
+  "private": true,
+  "main": "tray/main.cjs",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "tsx src/server.ts",
+    "tray": "electron tray/main.cjs",
+    "tray:detached": "node tray/start-detached.cjs",
+    "make-icon": "node tray/make-icon.cjs",
+    "start": "node dist/src/server.js",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test tray/auto-launch.test.cjs tray/port-selection.test.cjs tray/integration-guide.test.cjs tray/wiki-repository.test.cjs desktop/desktop.test.cjs && tsx --test src/agentRunner.test.ts src/appServerRunner.test.ts src/appServerProtocol.test.ts src/clientHtml.test.ts src/commandInput.test.ts src/config.test.ts src/serverStartup.test.ts src/jobStore.test.ts eval/replay.test.ts",
+    "test:integration": "tsx --test src/appServerRunner.integration.test.ts",
+    "eval:replay": "tsx eval/replay.ts",
+    "eval:live": "tsx eval/live.ts",
+    "build": "tsc",
+    "prepare:wiki-seed": "node tray/prepare-wiki-seed.cjs",
+    "app:pack": "npm run build && npm run prepare:wiki-seed && electron-builder --dir",
+    "app:dist": "npm run build && npm run prepare:wiki-seed && electron-builder --win nsis"
+  },
+  "dependencies": {
+    "fastify": "^5.6.2",
+    "zod": "^4.1.13"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "electron": "^39.2.7",
+    "electron-builder": "^26.15.3",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  },
+  "build": {
+    "appId": "local.wiki-server",
+    "productName": "Wiki Server",
+    "asar": true,
+    "artifactName": "Wiki-Server-${version}-${arch}.${ext}",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/src/**/*",
+      "desktop/**/*",
+      "tray/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "wiki-root",
+        "to": "wiki-root-seed",
+        "filter": [
+          "**/*",
+          "**/.gitkeep",
+          "!.git/**",
+          "!**/.git/**"
+        ]
+      },
+      {
+        "from": ".cache/wiki-git-seed",
+        "to": "wiki-git-seed",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "win": {
+      "icon": "tray/icon.ico",
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "deleteAppDataOnUninstall": false
+    }
+  }
+}

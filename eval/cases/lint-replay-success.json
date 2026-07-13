@@ -1,0 +1,16 @@
+{
+  "id": "lint-replay-success",
+  "description": "A successful lint run records audit writes and the final lint report.",
+  "mode": "replay",
+  "command": "lint",
+  "fixtureJobId": "33333333-3333-4333-8333-333333333333",
+  "expected": {
+    "status": "succeeded",
+    "requiredLastAgentMessagePatterns": ["Lint report"],
+    "eventTypes": ["status", "agent_event", "done"],
+    "fileObservability": {
+      "readIncludes": ["index.md"],
+      "writeIncludes": ["log.md"]
+    }
+  }
+}

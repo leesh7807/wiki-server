@@ -1,0 +1,25 @@
+{
+  "id": "22222222-2222-4222-8222-222222222222",
+  "command": "ingest",
+  "status": "failed",
+  "createdAt": "2026-06-27T00:01:00.000Z",
+  "updatedAt": "2026-06-27T00:01:01.000Z",
+  "startedAt": "2026-06-27T00:01:00.000Z",
+  "finishedAt": "2026-06-27T00:01:01.000Z",
+  "contentLength": 17,
+  "contentPreview": "missing-source.md",
+  "error": {
+    "message": "Codex process exited with code 1",
+    "lastAgentMessage": "The source rejected because missing-source.md does not exist."
+  },
+  "lastEventAt": "2026-06-27T00:01:01.000Z",
+  "metrics": {
+    "queuedAheadCount": 0,
+    "queueWaitMs": 0,
+    "runMs": 1000,
+    "totalMs": 1000,
+    "fileObservability": {
+      "ambiguousFilePaths": ["missing-source.md"]
+    }
+  }
+}
