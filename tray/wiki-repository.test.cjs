@@ -25,3 +25,16 @@ test("packaging carries wiki content and renamed Git history separately", () => 
   const contentSeed = resources.find((entry) => entry.to === "wiki-root-seed");
   assert.equal(contentSeed.from, "wiki-template");
 });
+
+test("packaging excludes tests and build-only tray scripts", () => {
+  const files = packageConfig.build.files;
+  for (const pattern of [
+    "!dist/src/**/*.test.js",
+    "!desktop/**/*.test.cjs",
+    "!tray/**/*.test.cjs",
+    "!tray/make-icon.cjs",
+    "!tray/prepare-wiki-seed.cjs",
+  ]) {
+    assert.ok(files.includes(pattern), `missing package exclusion: ${pattern}`);
+  }
+});

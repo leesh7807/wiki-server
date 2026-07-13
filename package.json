@@ -1,6 +1,6 @@
 {
   "name": "wiki-server",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Local desktop agent server for an LLM-maintained wiki",
   "author": "Wiki Server Contributors",
   "private": true,
@@ -12,7 +12,6 @@
   "scripts": {
     "dev": "tsx src/server.ts",
     "tray": "electron tray/main.cjs",
-    "tray:detached": "node tray/start-detached.cjs",
     "make-icon": "node tray/make-icon.cjs",
     "start": "node dist/src/server.js",
     "typecheck": "tsc --noEmit",
@@ -46,8 +45,14 @@
     },
     "files": [
       "dist/src/**/*",
+      "!dist/src/**/*.test.js",
+      "!dist/src/**/*.integration.test.js",
       "desktop/**/*",
+      "!desktop/**/*.test.cjs",
       "tray/**/*",
+      "!tray/**/*.test.cjs",
+      "!tray/make-icon.cjs",
+      "!tray/prepare-wiki-seed.cjs",
       "package.json"
     ],
     "extraResources": [

@@ -82,7 +82,6 @@ const startHidden = process.argv.includes("--hidden");
 
 let tray;
 let mainWindow = null;
-let settingsWindow = null;
 let serverProcess = null;
 let status = "starting";
 let externallyManaged = false;
@@ -107,7 +106,6 @@ app.whenReady().then(async () => {
   updateServerUrls();
   ensurePackagedWikiRoot();
   fs.mkdirSync(logDir, { recursive: true });
-  registerSettingsHandlers();
   registerDesktopHandlers();
 
   tray = new Tray(createTrayIcon());
@@ -269,53 +267,13 @@ function openServer() {
 }
 
 function openSettings() {
-  if (settingsWindow) {
-    settingsWindow.show();
-    settingsWindow.focus();
-    return;
+  showMainWindow();
+  if (mainWindow?.webContents.isLoading()) {
+    mainWindow.webContents.once("did-finish-load", () =>
+      mainWindow?.webContents.send("desktop:navigate", "settings"));
+  } else {
+    mainWindow?.webContents.send("desktop:navigate", "settings");
   }
-
-  settingsWindow = new BrowserWindow({
-    width: 380,
-    height: 340,
-    resizable: false,
-    title: "Wiki Server Settings",
-    icon: iconPath,
-    webPreferences: {
-      contextIsolation: true,
-      preload: path.join(__dirname, "preload.cjs"),
-    },
-  });
-
-  settingsWindow.setMenu(null);
-  settingsWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(settingsHtml())}`);
-  settingsWindow.on("closed", () => {
-    settingsWindow = null;
-  });
-}
-
-function registerSettingsHandlers() {
-  ipcMain.handle("settings:get", () => ({
-    autoLaunch: getAutoLaunchState().enabled,
-    autoLaunchState: getAutoLaunchState(),
-    clientUrl,
-    externallyManaged,
-    healthUrl,
-    logPath,
-    status,
-    wikiRoot: configuredWikiRoot || "automatic (embedded wiki-root preferred)",
-    dataDir,
-  }));
-
-  ipcMain.handle("settings:set-auto-launch", (_event, enabled) => {
-    const state = setAutoLaunch(Boolean(enabled));
-    return { autoLaunch: state.enabled, autoLaunchState: state };
-  });
-
-  ipcMain.handle("settings:open-client", () => openClient());
-  ipcMain.handle("settings:open-health", () => openServer());
-  ipcMain.handle("settings:open-logs", () => shell.openPath(logPath));
-  ipcMain.handle("settings:open-data", () => shell.openPath(app.isPackaged ? packagedDataRoot : dataDir));
 }
 
 function registerDesktopHandlers() {
@@ -633,82 +591,4 @@ function createTrayIcon() {
     return nativeImage.createFromPath(fallbackIconPath).resize({ width: 16, height: 16 });
   }
   return image.resize({ width: 16, height: 16 });
-}
-
-function settingsHtml() {
-  return `<!doctype html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Wiki Server Settings</title>
-  <style>
-    :root { color-scheme: light dark; font-family: "Segoe UI", sans-serif; }
-    body { margin: 0; padding: 18px; }
-    h1 { font-size: 18px; margin: 0 0 14px; font-weight: 600; }
-    .row { display: flex; align-items: center; gap: 10px; margin: 14px 0; }
-    .meta { margin: 12px 0 18px; color: #64748b; font-size: 12px; line-height: 1.45; word-break: break-all; }
-    button { border: 1px solid #94a3b8; border-radius: 6px; background: transparent; padding: 7px 10px; font: inherit; cursor: pointer; }
-    button:hover { background: rgba(148, 163, 184, 0.16); }
-    input { width: 16px; height: 16px; }
-    #saved { color: #16a34a; font-size: 12px; min-height: 18px; }
-    #autoLaunchNote { color: #64748b; font-size: 12px; margin-top: -6px; }
-  </style>
-</head>
-<body>
-  <h1>Wiki Server</h1>
-  <label class="row">
-    <input id="autoLaunch" type="checkbox">
-    <span>Launch when the computer starts</span>
-  </label>
-  <div id="autoLaunchNote"></div>
-  <div class="meta">
-    <div>Status: <span id="status">loading</span></div>
-    <div>Client: <span id="client"></span></div>
-    <div>Health: <span id="health"></span></div>
-    <div>Wiki root: <span id="wikiRoot"></span></div>
-    <div>Data: <span id="dataDir"></span></div>
-  </div>
-  <div class="row">
-    <button id="openClient">Open client</button>
-    <button id="openHealth">Open health check</button>
-    <button id="openLogs">Open logs</button>
-    <button id="openData">Open data</button>
-  </div>
-  <div id="saved"></div>
-  <script>
-    const autoLaunch = document.getElementById("autoLaunch");
-    const saved = document.getElementById("saved");
-
-    async function render() {
-      const settings = await window.wikiTray.getSettings();
-      autoLaunch.checked = settings.autoLaunch;
-      autoLaunch.disabled = !settings.autoLaunchState.supported;
-      document.getElementById("autoLaunchNote").textContent = settings.autoLaunchState.message || "";
-      document.getElementById("status").textContent = settings.externallyManaged
-        ? settings.status + " (external)"
-        : settings.status;
-      document.getElementById("client").textContent = settings.clientUrl;
-      document.getElementById("health").textContent = settings.healthUrl;
-      document.getElementById("wikiRoot").textContent = settings.wikiRoot;
-      document.getElementById("dataDir").textContent = settings.dataDir;
-    }
-
-    autoLaunch.addEventListener("change", async () => {
-      const result = await window.wikiTray.setAutoLaunch(autoLaunch.checked);
-      autoLaunch.checked = result.autoLaunch;
-      autoLaunch.disabled = !result.autoLaunchState.supported;
-      document.getElementById("autoLaunchNote").textContent = result.autoLaunchState.message || "";
-      saved.textContent = "Saved";
-      setTimeout(() => saved.textContent = "", 1400);
-    });
-
-    document.getElementById("openClient").addEventListener("click", () => window.wikiTray.openClient());
-    document.getElementById("openHealth").addEventListener("click", () => window.wikiTray.openHealth());
-    document.getElementById("openLogs").addEventListener("click", () => window.wikiTray.openLogs());
-    document.getElementById("openData").addEventListener("click", () => window.wikiTray.openData());
-    render();
-  </script>
-</body>
-</html>`;
 }

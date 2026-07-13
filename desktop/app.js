@@ -9,6 +9,9 @@ const views = {
 const terminal = new Set(["succeeded", "failed", "cancelled", "interrupted"]);
 
 document.querySelectorAll(".nav-item").forEach((button) => button.addEventListener("click", () => selectView(button.dataset.view)));
+api.onNavigate((view) => {
+  if (views[view]) selectView(view);
+});
 document.querySelectorAll(".command-tab").forEach((button) => button.addEventListener("click", () => selectCommand(button.dataset.command)));
 document.getElementById("submitCommand").addEventListener("click", submit);
 document.getElementById("refreshButton").addEventListener("click", refresh);

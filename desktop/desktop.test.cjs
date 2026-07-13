@@ -39,6 +39,11 @@ test("desktop settings expose background launch at Windows login", () => {
   assert.match(app, /api\.setAutoLaunch\(requested\)/);
 });
 
+test("tray settings navigation reuses the dedicated desktop settings view", () => {
+  assert.match(app, /api\.onNavigate/);
+  assert.doesNotMatch(app, /wikiTray/);
+});
+
 test("desktop visual system uses the paper and ink palette", () => {
   assert.match(css, /--paper:\s*#f5f4ed/i);
   assert.match(css, /--blue:\s*#1b365d/i);

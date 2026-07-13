@@ -15,4 +15,5 @@ contextBridge.exposeInMainWorld("wikiDesktop", {
   setAutoLaunch: (enabled) => ipcRenderer.invoke("desktop:set-auto-launch", enabled),
   workspace: () => ipcRenderer.invoke("desktop:workspace"),
   openObsidian: () => ipcRenderer.invoke("desktop:open-obsidian"),
+  onNavigate: (listener) => ipcRenderer.on("desktop:navigate", (_event, view) => listener(view)),
 });

@@ -11,7 +11,8 @@ directory and operating structure for a new installation.
 Agent work in this repository follows the continuous-slice rule in `AGENTS.md`:
 continue through recommended implementation slices when choices are visible,
 bounded, replaceable, and verified. Details are in
-`docs/agent-control-and-continuous-slices.md`.
+`docs/agent-control-and-continuous-slices.md`; day-to-day module ownership and
+verification guidance is in `docs/code-quality.md`.
 
 ## Run
 
