@@ -3,7 +3,7 @@
 Installable local agent server for a user-owned, Git-managed wiki.
 
 The server owns HTTP intake, the Codex runner, job lifecycle, runtime logs,
-observability metrics, tray startup, and the evaluation harness. Installed wiki
+observability metrics, and tray startup. Installed wiki
 content lives only under `%LOCALAPPDATA%\Wiki Server\wiki-root` by default and
 has its own Git history. The tracked `wiki-template/` contains only the minimal
 directory and operating structure for a new installation.
@@ -82,30 +82,12 @@ copy that guide when the app reports a port fallback.
 `POST /query`, `/ingest`, and `/lint` return `202` with `jobId`, `status`, and
 `eventsUrl`. Read successful answers from `result.lastAgentMessage`.
 
-## Evaluation
-
-Replay evaluation is the default because it does not call a model:
-
-```powershell
-npm run eval:replay
-```
-
-Live evaluation is opt-in and expects a running server:
-
-```powershell
-$env:WIKI_RUN_WIKI_SERVER_LIVE_EVAL = "1"
-npm run eval:live
-```
-
-Eval reports are written to `.cache/wiki-server/eval-reports/`.
-
 ## Validation
 
 ```powershell
 npm test
 npm run typecheck
 npm run build
-npm run eval:replay
 ```
 
 The real Codex app-server integration remains opt-in:

@@ -54,19 +54,18 @@ Continue autonomously when:
 - The agent can expose the choice and its rationale without requiring the user
   to inspect the implementation.
 - The selected direction has a rollback or replacement boundary.
-- The work adds harness coverage, replay fixtures, deterministic validation, or
+- The work adds test coverage, regression fixtures, deterministic validation, or
   documentation for an already accepted design.
 - The outcome can be checked with local commands.
 - Failure can be recovered by inspecting the diff and test output.
 
 Examples:
 
-- Add more replay eval cases.
+- Add focused regression cases.
 - Convert a checklist into a script.
 - Add config tests for environment variables.
 - Improve docs that describe implemented behavior.
-- Run `npm test`, `npm run typecheck`, `npm run build`, and `npm run
-  eval:replay`.
+- Run `npm test`, `npm run typecheck`, and `npm run build`.
 
 ## Stop For User Decision
 
@@ -76,7 +75,7 @@ Stop and ask when:
 - Changing the public HTTP contract or command semantics.
 - Making the service network-accessible beyond `127.0.0.1`.
 - Adding authentication, approval UI, user-input routing, or permission policy.
-- Running live model-backed evals unless the user has opted in for that slice.
+- Running live model-backed checks unless the user has opted in for that slice.
 - Deleting data, removing an implementation, or making a migration cutover that
   would be expensive to reverse.
 - Choosing among alternatives when no recommendation is justified by repo
@@ -220,7 +219,7 @@ While waiting, do not:
 - Start broad research that is not required for the current slice.
 - Run tests that depend on the pending job's result.
 - Edit files based on a result that has not arrived.
-- Start live/model-backed evaluation, network exposure, auth, approval, or
+- Start live/model-backed checks, network exposure, auth, approval, or
   permission work as a way to fill time.
 - Promote worker-discovered information into durable wiki knowledge from a
   worker or subagent role.
@@ -264,19 +263,18 @@ an ingest candidate with the decision, why it is durable, what alternatives or
 failure modes matter, and where the repo encoded the decision. The coordinating
 agent decides whether to call `/ingest`.
 
-## Harness Priority
+## Verification Priority
 
 Prefer checks in this order:
 
 1. Unit tests and typecheck.
 2. Build.
-3. Replay eval.
-4. Local smoke with warmup disabled or fake/replay-backed behavior.
-5. Live Codex/model-backed eval only when explicitly opted in.
+3. Local smoke with warmup disabled or fake-backed behavior.
+4. Live Codex/model-backed checks only when explicitly opted in.
 
-Replay is the default because it is cheap, repeatable, and safe for continuous
-work. Live checks are valuable but should not become an accidental cost or
-latency trap.
+Deterministic checks are the default because they are cheap, repeatable, and
+safe for continuous work. Live checks are valuable but should not become an
+accidental cost or latency trap.
 
 ## Handoff Standard
 
@@ -284,7 +282,7 @@ If work stops, the next agent should be able to continue from:
 
 - Git diff/status.
 - README and docs.
-- Test/eval output.
+- Test output.
 - Fixtures and scripts.
 - A concise final report.
 

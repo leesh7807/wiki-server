@@ -1,3 +1,0 @@
-{"seq":1,"at":"2026-06-27T00:01:00.000Z","jobId":"22222222-2222-4222-8222-222222222222","event":"status","data":{"status":"running"}}
-{"seq":2,"at":"2026-06-27T00:01:00.500Z","jobId":"22222222-2222-4222-8222-222222222222","event":"agent_event","data":{"tool":"shell_command","command":"Get-Content missing-source.md"}}
-{"seq":3,"at":"2026-06-27T00:01:01.000Z","jobId":"22222222-2222-4222-8222-222222222222","event":"done","data":{"status":"failed"}}

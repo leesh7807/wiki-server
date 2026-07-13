@@ -9,7 +9,6 @@
 - Codex app-server runner plus exec fallback
 - Job metadata, raw event logs, metrics, and retention
 - Electron tray process and startup behavior
-- Replay/live evaluation harness
 
 The installed operational wiki owns durable knowledge:
 
@@ -36,7 +35,7 @@ are editable surfaces for this repository.
 
 During migration, agents should not treat copied files as untouchable legacy
 code. Refactor or replace internal pieces when it improves server ownership,
-evaluation, observability, or maintainability and the slice remains visible,
+testability, observability, or maintainability and the slice remains visible,
 bounded, replaceable, and verified. The temporary rule belongs in `AGENTS.md`
 only while imported code still risks being mistaken for protected design.
 
@@ -58,7 +57,6 @@ stored in `.cache/wiki-server/` in this repository:
 - `jobs/`
 - `jobs/raw-events/`
 - `codex-home/`
-- `eval-reports/`
 - `tray.log`
 
 ## Execution

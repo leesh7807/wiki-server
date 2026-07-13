@@ -18,7 +18,6 @@ Before removing the old implementation, the external server must pass:
 npm test
 npm run typecheck
 npm run build
-npm run eval:replay
 ```
 
 Then run a local smoke with warmup disabled:
@@ -89,7 +88,7 @@ Move or shrink that rule out of `AGENTS.md` after:
 - The external server is the working default.
 - The old wiki-owned server has been removed or replaced with a pointer.
 - The architecture docs clearly define stable internal ownership boundaries.
-- Tests, replay eval, build, and local smoke checks cover the replacement
+- Tests, build, and local smoke checks cover the replacement
   boundaries that matter.
 
 After that point, the durable guidance belongs in architecture and maintenance

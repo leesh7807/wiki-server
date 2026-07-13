@@ -13,7 +13,6 @@ the next bounded change easier to locate, test, replace, and review.
 - `src/clientHtml.ts`: compatibility web client.
 - `tray/`: Electron lifecycle and operating-system integrations.
 - `desktop/`: dedicated renderer UI.
-- `eval/`: deterministic replay and opt-in live evaluation.
 
 Keep the public HTTP contract stable unless a change is explicitly approved.
 Internal modules may be split or replaced when behavior remains tested.
@@ -36,9 +35,23 @@ Use the smallest relevant check first, then close a release-sized slice with:
 ```powershell
 npm test
 npm run typecheck
-npm run eval:replay
+npm run build
 ```
 
 Run live model-backed or integration checks only when explicitly authorized.
 Report the public contract, owned files, deterministic checks, rollback
 boundary, and any remaining user decision surface.
+
+## Model Quality Evaluation
+
+The repository does not currently ship a standalone `eval/` harness. The
+previous harness graded synthetic example jobs and its own mechanics, but did
+not measure the quality of real wiki work. Keeping it would have overstated the
+project's effective quality coverage.
+
+Reintroduce model-quality evaluation only with a curated, representative corpus
+and separate acceptance criteria for query answer quality, ingest preservation,
+and full-wiki lint findings. Live runs must remain explicitly enabled because
+they incur model cost. Until those inputs and judgments exist, use focused unit
+and integration tests for deterministic contracts rather than example eval
+fixtures.

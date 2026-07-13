@@ -1,3 +1,0 @@
-{"seq":1,"at":"2026-06-27T00:02:00.000Z","jobId":"33333333-3333-4333-8333-333333333333","event":"status","data":{"status":"running"}}
-{"seq":2,"at":"2026-06-27T00:02:03.000Z","jobId":"33333333-3333-4333-8333-333333333333","event":"agent_event","data":{"tool":"apply_patch","patch":"*** Begin Patch\n*** Update File: log.md\n@@\n+lint replay\n*** End Patch"}}
-{"seq":3,"at":"2026-06-27T00:02:05.000Z","jobId":"33333333-3333-4333-8333-333333333333","event":"done","data":{"status":"succeeded"}}

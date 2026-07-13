@@ -50,7 +50,7 @@ Recommended Windows layout:
 ```text
 %LOCALAPPDATA%\Wiki Server\
   wiki-root\        # mutable durable wiki with its own independent .git history
-  runtime\          # jobs, raw events, Codex home, eval reports, tray logs
+  runtime\          # jobs, raw events, Codex home, tray logs
   config.json       # desktop-managed settings and model profiles
 ```
 

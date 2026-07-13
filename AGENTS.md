@@ -2,7 +2,7 @@
 # Wiki Server Agent Contract
 
 This repository owns the local wiki agent server, runtime observability,
-evaluation harness, desktop app, and the minimal template used to initialize a
+desktop app, and the minimal template used to initialize a
 new user's operational wiki. It does not own or track the user's wiki content.
 
 Default local layout:
@@ -33,7 +33,7 @@ copied from `C:\Users\leesh\projects\wiki\tools\wiki-server`. Treat that copied
 code as a compatibility baseline, not a protected design. Preserve the public
 HTTP contract unless the user approves a semantic change, but the imported
 internal structure is editable project surface. Refactor, modularize, or replace
-it when doing so improves external ownership, observability, evaluation, or
+it when doing so improves external ownership, observability, testability, or
 maintainability, as long as the slice is visible, bounded, replaceable, and
 verified. This posture should shrink or leave `AGENTS.md` after migration is
 complete and the external server has its own stable design boundaries.
@@ -54,7 +54,7 @@ policy, destructive or hard-to-reverse migration behavior, public command
 semantics, or when no repo-grounded recommendation can be made visible and
 reasonably reversible.
 
-Proceed without asking for bounded implementation, tests, replay fixtures,
+Proceed without asking for bounded implementation, tests, regression fixtures,
 docs, scripts, harness checks, narrow refactors, and local deterministic
 validation that preserve the public HTTP contract. Close each slice with durable
 state in code, tests, fixtures, docs, or a concise final report; name meaningful
