@@ -10,7 +10,7 @@ const DEFAULT_CODEX_MODELS: WikiCommandModels = {
 
 export type WikiServerPaths = {
   wikiRoot: string;
-  wikiRootSource: "embedded" | "legacy-sibling" | "environment";
+  wikiRootSource: "legacy-sibling" | "environment";
   dataDir: string;
   jobsDir: string;
   appServerCodexHome: string;
@@ -63,17 +63,12 @@ export function resolveWikiServerPaths(
 ): WikiServerPaths {
   const env = options.env ?? process.env;
   const packageRoot = path.resolve(options.packageRoot);
-  const embeddedWikiRoot = path.join(packageRoot, "wiki-root");
   const wikiRoot = env.WIKI_ROOT
     ? path.resolve(env.WIKI_ROOT)
-    : existsSync(embeddedWikiRoot)
-      ? embeddedWikiRoot
-      : path.resolve(packageRoot, "..", "wiki");
+    : path.resolve(packageRoot, "..", "wiki");
   const wikiRootSource = env.WIKI_ROOT
     ? "environment"
-    : wikiRoot === embeddedWikiRoot
-      ? "embedded"
-      : "legacy-sibling";
+    : "legacy-sibling";
   assertLooksLikeWikiRoot(wikiRoot);
 
   const dataDir = env.WIKI_SERVER_DATA_DIR

@@ -2,14 +2,15 @@
 # Wiki Server Agent Contract
 
 This repository owns the local wiki agent server, runtime observability,
-evaluation harness, and—after content consolidation—the nested wiki root. The
-sibling wiki repository is a compatibility fallback during migration.
+evaluation harness, desktop app, and the minimal template used to initialize a
+new user's operational wiki. It does not own or track the user's wiki content.
 
 Default local layout:
 
 - Server repo: `C:\Users\leesh\projects\wiki-server`
-- Wiki root: `C:\Users\leesh\projects\wiki-server\wiki-root` when present;
-  otherwise legacy `C:\Users\leesh\projects\wiki`, or `WIKI_ROOT`
+- Installed wiki root: `%LOCALAPPDATA%\Wiki Server\wiki-root`, passed to the
+  server as `WIKI_ROOT`; source-only development may use legacy
+  `C:\Users\leesh\projects\wiki` or an explicit `WIKI_ROOT`
 - HTTP API: `http://127.0.0.1:55173` by default; copy the active endpoint from
   the desktop app when it reports a port fallback
 - Server runtime data: `.cache/wiki-server/` in this repository, unless
@@ -22,6 +23,10 @@ advisory context, not binding implementation truth. For this repository, prefer
 the local code, tests, README, and docs. If the wiki disagrees with this repo,
 treat the disagreement as a design signal to investigate, not as an automatic
 override.
+
+The tracked `wiki-template/` is structure and a minimal operating contract, not
+a content snapshot and not a second source of truth. Never copy a user's live
+wiki back into this repository as a packaging seed.
 
 Temporary migration posture: much of the current server implementation was
 copied from `C:\Users\leesh\projects\wiki\tools\wiki-server`. Treat that copied

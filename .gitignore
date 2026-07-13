@@ -3,4 +3,3 @@ dist/
 .cache/
 npm-debug.log*
 release/
-/wiki-root/

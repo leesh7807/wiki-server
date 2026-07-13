@@ -1,5 +1,5 @@
 const assert = require("node:assert/strict");
-const { readFileSync } = require("node:fs");
+const { existsSync, readFileSync, statSync } = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
 
@@ -8,10 +8,14 @@ const packageConfig = JSON.parse(readFileSync(path.join(packageRoot, "package.js
 const gitignore = readFileSync(path.join(packageRoot, ".gitignore"), "utf8");
 const main = readFileSync(path.join(__dirname, "main.cjs"), "utf8");
 
-test("server and nested wiki use independent Git boundaries", () => {
-  assert.match(gitignore, /^\/wiki-root\/$/m);
+test("server tracks only a minimal wiki template", () => {
+  assert.doesNotMatch(gitignore, /^\/wiki-template\/$/m);
+  assert.equal(existsSync(path.join(packageRoot, "wiki-root")), false);
   assert.match(main, /wiki-git-seed/);
   assert.match(main, /ensurePackagedWikiGitRepository/);
+  for (const directory of ["exports", "inbox", "raw/assets", "raw/sources", "wiki/concepts", "wiki/decisions", "wiki/entities", "wiki/maps", "wiki/projects", "wiki/sources"]) {
+    assert.equal(statSync(path.join(packageRoot, "wiki-template", directory, ".gitkeep")).size, 0);
+  }
 });
 
 test("packaging carries wiki content and renamed Git history separately", () => {
@@ -19,5 +23,5 @@ test("packaging carries wiki content and renamed Git history separately", () => 
   assert.ok(resources.some((entry) => entry.to === "wiki-root-seed"));
   assert.ok(resources.some((entry) => entry.to === "wiki-git-seed"));
   const contentSeed = resources.find((entry) => entry.to === "wiki-root-seed");
-  assert.ok(contentSeed.filter.some((pattern) => pattern.includes(".git/**")));
+  assert.equal(contentSeed.from, "wiki-template");
 });

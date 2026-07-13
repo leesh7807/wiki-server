@@ -41,8 +41,9 @@ toggle remains accurate across app restarts and installer upgrades.
 
 ## Installable Data Layout
 
-Packaged application resources are immutable. The checked-in `wiki-root/`
-snapshot is therefore a first-run seed, not the live installed wiki.
+Packaged application resources are immutable. The checked-in `wiki-template/`
+contains only a minimal directory layout and operating contract for a new wiki;
+it contains no user knowledge snapshot.
 
 Recommended Windows layout:
 
@@ -53,15 +54,16 @@ Recommended Windows layout:
   config.json       # desktop-managed settings and model profiles
 ```
 
-Installer upgrades must never overwrite an existing live `wiki-root/`. A seed
-version can be recorded for diagnostics, but content upgrades happen only
-through normal ingest or an explicit migration action. A future folder chooser
-may relocate the wiki, with `WIKI_ROOT` retained as the compatibility override.
+Installer upgrades must never overwrite an existing live `wiki-root/`.
+Knowledge changes happen only inside the operational wiki through normal ingest
+or explicit user file operations. A future folder chooser may relocate the wiki,
+with `WIKI_ROOT` retained as the compatibility override.
 
-The packaged seed includes a separately staged copy of the nested wiki's Git
-metadata. First-run initialization creates a real repository, and upgrades add
-that metadata to legacy managed roots that do not yet have `.git`. Wiki commits
-therefore remain independent from application-code commits.
+At build time the minimal template receives a deterministic initial Git commit,
+and its small Git metadata seed is packaged separately. First-run initialization
+therefore creates a real repository without shipping any previous user's wiki
+history. Upgrades add Git metadata only to legacy managed roots that lack it and
+never overwrite their content.
 
 Install, upgrade, and uninstall never present a data-deletion prompt. They
 always preserve `%LOCALAPPDATA%\Wiki Server`, including the wiki, job history,
@@ -73,8 +75,10 @@ Source-control-only `.gitkeep` placeholders are not required in the packaged
 seed. First-run initialization creates the expected empty wiki directories
 explicitly after copying content.
 
-The app Settings window exposes the resolved wiki and data paths plus an
-**Open data** action so users can inspect or back up data before uninstalling.
+The Wiki screen opens the operational wiki and runtime directory as separate
+actions. It also exposes Git branch, HEAD, commit count, working-tree state, and
+Obsidian availability. Obsidian integration uses the registered `obsidian://`
+protocol and opens the operational `index.md` by absolute path.
 
 ## Visual Direction
 

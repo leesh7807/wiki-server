@@ -11,7 +11,7 @@
 - Electron tray process and startup behavior
 - Replay/live evaluation harness
 
-The nested `wiki-root/` domain owns durable knowledge:
+The installed operational wiki owns durable knowledge:
 
 - Wiki operating contract and command semantics
 - Raw source archive, source pages, compiled pages, index, and log
@@ -42,11 +42,12 @@ only while imported code still risks being mistaken for protected design.
 
 ## Runtime Paths
 
-The package root is `C:\Users\leesh\projects\wiki-server`. The target wiki root
-is `wiki-root/` inside that repository. During migration, the server uses the
-legacy sibling `C:\Users\leesh\projects\wiki` only when `wiki-root/` is absent.
-If `wiki-root/` exists but is incomplete, startup fails instead of silently
-falling back.
+The package root is `C:\Users\leesh\projects\wiki-server`. A packaged desktop
+app passes `%LOCALAPPDATA%\Wiki Server\wiki-root` explicitly through
+`WIKI_ROOT`. The source repository contains only `wiki-template/`, which is a
+minimal new-user scaffold and never a content snapshot. Source-only development
+continues to use legacy sibling `C:\Users\leesh\projects\wiki` when no override
+is provided.
 
 `WIKI_ROOT` overrides both locations. The server validates that the root contains
 `AGENTS.md`, `index.md`, and `wiki/`.
@@ -92,6 +93,12 @@ startup, settings, and logs. The HTTP API remains the UI boundary so the
 Electron internals and web client can be replaced independently. Future app
 slices should surface active wiki ownership, queue state, and command model
 profiles without taking wiki command policy away from the server.
+
+The Wiki screen distinguishes the operational wiki from runtime data, reports
+the local wiki's Git branch/HEAD/working-tree state, and detects Obsidian. An
+Obsidian URI opens `index.md` only after the operational folder is registered as
+a vault; otherwise the app opens both programs and provides one-time setup
+guidance.
 
 ## Concurrency
 

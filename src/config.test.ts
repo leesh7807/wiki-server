@@ -73,29 +73,6 @@ test("finds the package root from source and compiled module depths", () => {
   }
 });
 
-test("uses the embedded wiki root when it is present", () => {
-  const parent = mkdtempSync(path.join(os.tmpdir(), "wiki-server-config-"));
-  const packageRoot = path.join(parent, "wiki-server");
-  const wikiRoot = path.join(packageRoot, "wiki-root");
-  mkdirSync(packageRoot, { recursive: true });
-  makeWikiRoot(wikiRoot);
-
-  try {
-    const paths = resolveWikiServerPaths({ packageRoot, env: {} });
-
-    assert.equal(paths.wikiRoot, wikiRoot);
-    assert.equal(paths.wikiRootSource, "embedded");
-    assert.equal(paths.dataDir, path.join(packageRoot, ".cache", "wiki-server"));
-    assert.equal(paths.jobsDir, path.join(packageRoot, ".cache", "wiki-server", "jobs"));
-    assert.equal(
-      paths.appServerCodexHome,
-      path.join(packageRoot, ".cache", "wiki-server", "codex-home"),
-    );
-  } finally {
-    rmSync(parent, { recursive: true, force: true });
-  }
-});
-
 test("falls back to the sibling wiki during migration", () => {
   const parent = mkdtempSync(path.join(os.tmpdir(), "wiki-server-config-"));
   const packageRoot = path.join(parent, "wiki-server");
@@ -108,6 +85,8 @@ test("falls back to the sibling wiki during migration", () => {
 
     assert.equal(paths.wikiRoot, wikiRoot);
     assert.equal(paths.wikiRootSource, "legacy-sibling");
+    assert.equal(paths.dataDir, path.join(packageRoot, ".cache", "wiki-server"));
+    assert.equal(paths.jobsDir, path.join(packageRoot, ".cache", "wiki-server", "jobs"));
   } finally {
     rmSync(parent, { recursive: true, force: true });
   }

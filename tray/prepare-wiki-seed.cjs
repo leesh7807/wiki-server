@@ -3,21 +3,27 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const packageRoot = path.resolve(__dirname, "..");
-const wikiRoot = path.join(packageRoot, "wiki-root");
-const gitRoot = path.join(wikiRoot, ".git");
+const wikiTemplate = path.join(packageRoot, "wiki-template");
+const repositoryRoot = path.join(packageRoot, ".cache", "wiki-template-repository");
+const gitRoot = path.join(repositoryRoot, ".git");
 const seedRoot = path.join(packageRoot, ".cache", "wiki-git-seed");
 
-if (!fs.existsSync(gitRoot)) {
-  throw new Error(`Nested wiki Git repository is missing: ${gitRoot}`);
+if (!fs.existsSync(path.join(wikiTemplate, "AGENTS.md"))) {
+  throw new Error(`Wiki template is incomplete: ${wikiTemplate}`);
 }
 
-const status = git(["status", "--porcelain"]);
-if (status.trim()) {
-  throw new Error(`Nested wiki must be clean before packaging:\n${status}`);
-}
-
-const head = git(["rev-parse", "HEAD"]).trim();
+fs.rmSync(repositoryRoot, { recursive: true, force: true });
 fs.rmSync(seedRoot, { recursive: true, force: true });
+fs.cpSync(wikiTemplate, repositoryRoot, { recursive: true });
+git(["init", "--initial-branch=main"]);
+git(["config", "user.name", "Wiki Server"]);
+git(["config", "user.email", "local@wiki-server"]);
+git(["add", "--all"]);
+git(["commit", "-m", "Initialize local wiki"], {
+  GIT_AUTHOR_DATE: "2026-01-01T00:00:00Z",
+  GIT_COMMITTER_DATE: "2026-01-01T00:00:00Z",
+});
+const head = git(["rev-parse", "HEAD"]).trim();
 fs.mkdirSync(path.dirname(seedRoot), { recursive: true });
 fs.cpSync(gitRoot, seedRoot, {
   recursive: true,
@@ -25,12 +31,14 @@ fs.cpSync(gitRoot, seedRoot, {
     return !source.endsWith(".lock");
   },
 });
+fs.rmSync(repositoryRoot, { recursive: true, force: true });
 
 console.log(`wiki Git seed prepared: ${head}`);
 
-function git(args) {
-  return execFileSync("git", ["-C", wikiRoot, ...args], {
+function git(args, extraEnv = {}) {
+  return execFileSync("git", ["-C", repositoryRoot, ...args], {
     encoding: "utf8",
     windowsHide: true,
+    env: { ...process.env, ...extraEnv },
   });
 }
