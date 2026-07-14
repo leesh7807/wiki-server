@@ -5,8 +5,8 @@
 Electron is the installable desktop shell for the local wiki server. The app
 owns process lifecycle, a dedicated file-based renderer, tray/background
 behavior, settings, logs, and installation. A restricted preload/IPC bridge
-exposes only health, metrics, submit, job, cancel, and local open actions to the
-renderer.
+exposes health, metrics, job commands, local open actions, and explicit
+operational-wiki Git import/sync actions to the renderer.
 
 The legacy `/client` page is not the desktop renderer. It remains a lightweight
 HTTP compatibility and diagnostic surface. Other repositories continue to use
@@ -79,6 +79,35 @@ The Wiki screen opens the operational wiki and runtime directory as separate
 actions. It also exposes Git branch, HEAD, commit count, working-tree state, and
 Obsidian availability. Obsidian integration uses the registered `obsidian://`
 protocol and opens the operational `index.md` by absolute path.
+
+Git remote import is a two-step desktop action. The first step uses system Git
+to clone into a same-volume staging directory, validates regular
+`AGENTS.md`/`index.md` files and a real `wiki/` directory, and computes a
+content-level preview. The confirmation surface names the timestamped backup
+path and warns that the remote `AGENTS.md` becomes agent execution policy. The
+second step refuses active queue work and externally managed servers, stops the
+owned server process, renames the existing wiki to the backup, atomically
+renames staging into place, and restarts the server. A failed second rename
+rolls the backup back into place.
+
+The staging directory is a short hidden sibling of the operational root. Clone
+enables `core.longpaths` for Git for Windows and persists that repository-local
+setting in the imported clone, preventing deep `raw/assets/` paths from failing
+only because a verbose staging prefix pushes them beyond legacy path limits.
+The Wiki screen keeps import collapsed until requested, separates Git remote
+management from HTTP API integration, and never displays Electron IPC method
+names in user-facing errors.
+
+Remote checking performs an explicit `git fetch` without changing the
+worktree. Fast-forward pull is enabled only for a clean branch whose local HEAD
+is an ancestor of `origin/<branch>`. Dirty, ahead, detached, missing-remote, and
+diverged states remain read-only. There is no scheduled sync, push, reset,
+force checkout, merge commit, or conflict-resolution workflow.
+
+GitHub and GitLab receive no special API treatment: every remote goes through
+the installed Git client. Authentication is delegated to Git Credential
+Manager or SSH. Credential-bearing HTTPS URLs are rejected before clone, Git
+failure details are normalized, and tray logging applies a final redaction pass.
 
 ## Visual Direction
 

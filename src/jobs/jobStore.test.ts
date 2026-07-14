@@ -41,6 +41,87 @@ test("job event persistence is serialized under bursty agent events", async () =
     for (let index = 1; index < events.length; index += 1) {
       assert.equal(events[index].seq, events[index - 1].seq + 1);
     }
+    const inMemoryEvents = (store as unknown as { events: Map<string, JobEvent[]> }).events;
+    await eventually(() => !inMemoryEvents.has(job.id));
+    assert.equal(store.getEvents(job.id).length, events.length);
+    assert.deepEqual(store.getEvents(job.id).map((event) => event.seq), events.map((event) => event.seq));
+  } finally {
+    rmSync(jobsDir, { recursive: true, force: true });
+  }
+});
+
+test("large persisted event payloads are compressed and replayed without changing public events", async () => {
+  const jobsDir = mkdtempSync(path.join(os.tmpdir(), "wiki-server-job-store-compressed-"));
+  let emitAgentEvent!: (event: unknown) => void;
+  let resolveRunner!: (result: RunnerResult) => void;
+  const originalData = {
+    type: "app_server_notification",
+    method: "item/completed",
+    params: {
+      item: {
+        type: "commandExecution",
+        command: "Get-Content wiki/projects/atlas.md",
+        aggregatedOutput: "한글-event-payload\n".repeat(8_000),
+      },
+    },
+  };
+  const store = new JobStore({
+    jobsDir,
+    heartbeatMs: 60_000,
+    compressEventLogs: true,
+    startRunner: (_job, hooks) => {
+      emitAgentEvent = hooks.onAgentEvent;
+      return {
+        done: new Promise<RunnerResult>((resolve) => {
+          resolveRunner = resolve;
+        }),
+        cancel: () => undefined,
+      };
+    },
+  });
+
+  try {
+    const job = store.enqueue("ingest", "source");
+    const liveEvents: JobEvent[] = [];
+    const unsubscribe = store.onJobEvent(job.id, (event) => liveEvents.push(event));
+    emitAgentEvent(originalData);
+    resolveRunner({ ok: true, result: { lastAgentMessage: "done" } });
+    await eventually(() => store.getJob(job.id)?.status === "succeeded");
+    await (store as unknown as { persistQueue: Promise<void> }).persistQueue;
+    unsubscribe();
+
+    const storedText = readFileSync(eventLogPath(jobsDir, job.id), "utf8");
+    const storedLines = storedText
+      .split(/\r?\n/)
+      .filter(Boolean)
+      .map((line) => JSON.parse(line) as Record<string, unknown>);
+    assert.equal(storedLines.some((line) => "_wikiServerStorage" in line), true);
+    assert.equal(storedText.includes("한글-event-payload"), false);
+    assert.equal(
+      Buffer.byteLength(storedText, "utf8") < Buffer.byteLength(JSON.stringify(originalData), "utf8") / 4,
+      true,
+    );
+
+    const replayed = store.getEvents(job.id);
+    const replayedAgentEvent = replayed.find((event) => event.event === "agent_event");
+    assert.deepEqual(replayedAgentEvent?.data, originalData);
+    assert.deepEqual(
+      replayedAgentEvent,
+      liveEvents.find((event) => event.event === "agent_event"),
+    );
+    assert.deepEqual(store.getEvents(job.id), replayed);
+    assert.equal(replayed.at(-1)?.event, "done");
+    const finalMetrics = metricsOf(store.getJob(job.id)).executionObservability;
+    assert.equal(finalMetrics?.completedCommandCount, 1);
+    assert.equal(finalMetrics?.outputBudgetViolationCount, 1);
+    const persisted = JSON.parse(
+      readFileSync(path.join(jobsDir, `${job.id}.meta.json`), "utf8"),
+    ) as Job;
+    assert.deepEqual(metricsOf(persisted).executionObservability, finalMetrics);
+    assert.deepEqual(
+      metricsOf(replayed.at(-1)?.data as { metrics?: Job["metrics"] }).executionObservability,
+      finalMetrics,
+    );
   } finally {
     rmSync(jobsDir, { recursive: true, force: true });
   }

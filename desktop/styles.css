@@ -82,11 +82,32 @@ textarea:focus { border-color: var(--blue); } textarea:disabled { color: var(--m
 .wide-card { grid-column: 1 / -1; }
 .path-value { min-height: 48px; margin: 18px 0; font: 12px/1.5 "Cascadia Mono", Consolas, monospace; overflow-wrap: anywhere; }
 .button-row { display: flex; flex-wrap: wrap; gap: 14px; }
-.left-message { text-align: left; }
-.git-summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; margin-top: 18px; }
+.git-summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px 18px; margin-top: 18px; }
 .git-summary span, .git-summary strong { display: block; }
 .git-summary span { margin-bottom: 5px; color: var(--muted); font-size: 9px; text-transform: uppercase; letter-spacing: .08em; }
 .git-summary strong { color: var(--blue); font: 14px Georgia, serif; overflow-wrap: anywhere; }
+.sync-actions { margin-top: 20px; }
+.sync-pull-button.ready { border-color: var(--blue); background: var(--blue); color: white; }
+.import-entry { display: flex; align-items: center; justify-content: space-between; gap: 24px; list-style: none; cursor: pointer; }
+.import-entry::-webkit-details-marker { display: none; }
+.import-entry h3 { margin-top: 3px; }
+.import-entry p:last-child { margin: 7px 0 0; color: var(--muted); font-size: 11px; }
+.import-entry::after { content: "펼치기"; flex: 0 0 auto; color: var(--blue); font-size: 10px; border-bottom: 1px solid currentColor; }
+.git-import-card[open] .import-entry::after { content: "접기"; }
+.git-import-body { margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--rule); }
+.git-import-body label { margin-top: 18px; }
+.remote-input-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; }
+.remote-input-row input { min-width: 0; padding: 11px 13px; border: 1px solid var(--rule); background: var(--paper); color: var(--ink); font: 12px "Cascadia Mono", Consolas, monospace; outline: none; }
+.remote-input-row input:focus { border-color: var(--blue); }
+.import-preview { margin-top: 22px; padding-top: 22px; border-top: 1px solid var(--rule); }
+.import-summary { grid-template-columns: repeat(4, 1fr); }
+.trust-warning { display: grid; grid-template-columns: 120px 1fr; gap: 14px; margin: 20px 0 0; padding: 14px; border-left: 2px solid #9d702f; background: #eee6d5; color: #704f22; font-size: 12px; line-height: 1.55; }
+.backup-notice { display: grid; grid-template-columns: 120px 1fr; gap: 14px; margin-top: 14px; padding: 14px; border: 1px solid var(--rule); font-size: 11px; }
+.backup-notice span { color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+.backup-notice code { overflow-wrap: anywhere; }
+.change-preview { max-height: 190px; margin: 14px 0; padding: 14px; overflow: auto; border: 1px solid var(--rule); background: var(--paper); color: #35382f; white-space: pre-wrap; font: 11px/1.55 "Cascadia Mono", Consolas, monospace; }
+.confirmation-row { display: flex !important; align-items: flex-start; gap: 10px; margin: 16px 0 !important; color: var(--ink) !important; font: 11px/1.55 "Inter", "Segoe UI", sans-serif !important; cursor: pointer; }
+.confirmation-row input { margin-top: 2px; }
 .integration-card { display: grid; grid-template-columns: 260px 1fr; gap: 28px; }
 .guide-block pre { margin: 0 0 14px; padding: 16px; border-left: 2px solid var(--blue); background: var(--paper); white-space: pre-wrap; color: #34372f; font: 11px/1.65 "Cascadia Mono", Consolas, monospace; }
 .guide-block .muted { margin-left: 10px; font-size: 11px; }
@@ -106,17 +127,25 @@ textarea:focus { border-color: var(--blue); } textarea:disabled { color: var(--m
 .switch-row input:disabled + .switch-track { opacity: .45; cursor: default; }
 .switch-row strong { min-width: 58px; color: var(--blue); font-size: 11px; text-align: left; }
 .setting-message { min-height: 17px; margin: 8px 0 0; color: var(--muted); font-size: 10px; text-align: right; }
+.setting-message.left-message { text-align: left; }
+.operation-message { font-size: 11px; line-height: 1.5; }
+.operation-message:not(:empty) { margin-top: 12px; padding: 10px 12px; border-left: 2px solid var(--rule); background: var(--paper); }
+.operation-message.error:not(:empty) { border-left-color: var(--danger); background: #f2e7e3; }
+.operation-message.success:not(:empty) { border-left-color: #486c5a; background: #e7ede7; color: #365646; }
 .setting-message.error { color: var(--danger); }
 .settings-actions { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
 .settings-actions > div:last-child { display: flex; gap: 10px; }
-.secondary-button { padding: 9px 13px; border: 1px solid var(--rule); background: transparent; cursor: pointer; } .secondary-button:hover { background: #ece9df; }
+.secondary-button { padding: 9px 13px; border: 1px solid var(--rule); background: transparent; cursor: pointer; } .secondary-button:hover:not(:disabled) { background: #ece9df; }
+.secondary-button:disabled { opacity: .45; cursor: default; }
 @media (max-width: 980px) {
   .app-shell { grid-template-columns: 190px minmax(0, 1fr); }
   .work-grid, .info-grid, .integration-card { grid-template-columns: 1fr; }
   .context-column { grid-template-columns: 1fr 1fr; }
   .metric-grid { grid-template-columns: repeat(2, 1fr); }
-  .git-summary { grid-template-columns: repeat(2, 1fr); }
+  .git-summary, .import-summary { grid-template-columns: repeat(2, 1fr); }
+  .import-entry { align-items: flex-start; flex-direction: column; }
   .startup-card { align-items: flex-start; flex-direction: column; }
+  .remote-input-row { grid-template-columns: 1fr; }
   .switch-row { justify-content: flex-start; }
   .setting-message { text-align: left; }
 }

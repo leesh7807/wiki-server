@@ -43,6 +43,7 @@ const heartbeatMs = Number.isFinite(parsedHeartbeatMs) && parsedHeartbeatMs > 0
 const jobsDir = paths.jobsDir;
 const httpLoggerEnabled = process.env.WIKI_SERVER_HTTP_LOG === "1";
 const graphRetrievalEnabled = process.env.WIKI_GRAPH_RETRIEVAL !== "0";
+const eventLogCompressionEnabled = process.env.WIKI_SERVER_COMPRESS_EVENT_LOGS !== "0";
 const wikiRetriever = new WikiRetriever(wikiRoot);
 
 const agentRunner = new AgentRunner({
@@ -62,6 +63,7 @@ const agentRunner = new AgentRunner({
 const store = new JobStore({
   jobsDir,
   heartbeatMs,
+  compressEventLogs: eventLogCompressionEnabled,
   startRunner: (job, hooks) => {
     if (!graphRetrievalEnabled) return agentRunner.startJob(job, hooks);
     try {
@@ -97,6 +99,7 @@ const app = createWikiHttpServer({
       enabled: graphRetrievalEnabled,
       strategy: "wiki-graph-v1",
     },
+    eventLogCompressionEnabled,
     agentRunner: agentRunner.status(),
   }),
 });

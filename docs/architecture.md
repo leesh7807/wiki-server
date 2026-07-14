@@ -100,17 +100,30 @@ source only for explicit provenance work. `WIKI_GRAPH_RETRIEVAL=0` rolls back
 to the original prompt framing.
 
 The initial retrieval event carries the bounded candidate paths or lint
-partitions. Job metrics then derive `retrievalObservability` from completed
-agent tool events, distinguishing candidate opens from searches and recording
-partition coverage, broad-root searches, excluded-path access, and the largest
-search output. Raw events remain authoritative evidence; the derived layer is
-explicitly best-effort and may report unknown or incomplete access.
+partitions. Ingest selection reserves current authority, source evidence, and a
+related map when each is available, then records bounded selection and exclusion
+reasons. Job metrics derive `retrievalObservability` from completed agent tool
+events, distinguishing candidate use, targeted provenance/log checks, repeated
+reads, broad-root searches, broad excluded-path access, and output size. The
+derived layer is explicitly best-effort and may report unknown or incomplete
+access.
 
-The initial query/ingest defaults are six lexical seeds, twelve final
-candidates, at most two graph hops, and eighty distinct query terms. These are
-bounded engineering defaults, not trained relevance parameters. Tune them from
-observed candidate coverage, broad-search frequency, search-output size,
-latency, and answer quality rather than increasing context speculatively.
+Live SSE always emits the original event envelope. For disk efficiency, large
+`data` payloads may be gzip-encoded in a versioned storage record inside the
+same `jobs/raw-events/<jobId>.jsonl` path. Event loading transparently restores
+the original `seq`, event name, and data before HTTP replay. Existing plain
+records and mixed logs remain readable. Set
+`WIKI_SERVER_COMPRESS_EVENT_LOGS=0` to write new records as plain JSON; older
+server versions cannot decode already-compressed storage records.
+
+The initial query/ingest defaults are six diversified lexical/role seeds,
+twelve final candidates, at most two graph hops, and eighty distinct query
+terms. Ingest command output has a 12,000-character observability budget;
+multi-path batches are limited to headings/frontmatter or bounded matches, and
+document bodies are reviewed one section at a time. These are bounded
+engineering defaults, not trained relevance parameters. Tune them from observed
+candidate use, broad-search frequency, output-budget violations, latency, and
+answer quality rather than increasing context speculatively.
 
 The standalone server defaults to `127.0.0.1:55173`. The desktop shell probes
 that port before launch and selects a nearby free port on collision. Port
@@ -142,6 +155,18 @@ the local wiki's Git branch/HEAD/working-tree state, and detects Obsidian. An
 Obsidian URI opens `index.md` only after the operational folder is registered as
 a vault; otherwise the app opens both programs and provides one-time setup
 guidance.
+
+`tray/wiki/git-remote.cjs` owns generic Git remote import and explicit
+fast-forward synchronization. It is an Electron-only management surface and
+does not add or alter public HTTP routes. Import uses a validated staging clone,
+a timestamped preserved backup, and same-volume atomic renames while the owned
+server is stopped. Remote `AGENTS.md` trust is a visible confirmation boundary.
+Pull always fetches and rechecks cleanliness and ancestry; it never resets,
+forces, creates a merge commit, or resolves conflicts. Credentials stay with
+system Git Credential Manager or SSH and are not app configuration.
+Windows staging uses a short sibling directory plus per-repository
+`core.longpaths` support so deep wiki assets remain checkoutable without
+changing global Git configuration.
 
 ## Concurrency
 

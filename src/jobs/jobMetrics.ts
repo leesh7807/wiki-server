@@ -1,5 +1,12 @@
 import path from "node:path";
-import type { Job, JobEvent, JobFileObservability, JobMetrics, JobTokenMetrics } from "./jobTypes.js";
+import type {
+  Job,
+  JobEvent,
+  JobExecutionObservability,
+  JobFileObservability,
+  JobMetrics,
+  JobTokenMetrics,
+} from "./jobTypes.js";
 import {
   applyRetrievalObservability,
   cloneRetrievalObservability,
@@ -13,6 +20,9 @@ const MAX_OBSERVABILITY_STRING_LENGTH = 4096;
 const MAX_PATCH_HEADER_SCAN_CHARS = 256 * 1024;
 const MAX_PATCH_HEADER_SCAN_LINES = 5000;
 const MAX_PATCH_HEADER_LINE_LENGTH = 2048;
+const COMMAND_OUTPUT_BUDGET_CHARACTERS = 12_000;
+const LARGE_COMMAND_OUTPUT_CHARACTERS = 16_000;
+const completedCommandFingerprints = new WeakMap<Job, Set<string>>();
 
 type AverageAccumulator = {
   sum: number;
@@ -70,6 +80,12 @@ export function applyAgentObservability(job: Job, event: unknown) {
   if (tokenUsage) {
     metrics.tokenUsageHighWater = mergeTokenUsage(metrics.tokenUsageHighWater, tokenUsage);
   }
+  const executionObservability = applyExecutionObservability(
+    job,
+    metrics.executionObservability,
+    event,
+  );
+  if (executionObservability) metrics.executionObservability = executionObservability;
 
   const fileObservability = extractFileObservability(event);
   metrics.retrievalObservability = applyRetrievalObservability(
@@ -130,6 +146,8 @@ export function normalizeJobMetrics(job: Partial<Pick<Job, "metrics" | "createdA
 
   const tokenUsage = normalizeTokenUsage(rawMetrics?.tokenUsageHighWater ?? rawMetrics?.tokenUsage);
   if (tokenUsage) metrics.tokenUsageHighWater = tokenUsage;
+  const executionObservability = normalizeExecutionObservability(rawMetrics?.executionObservability);
+  if (executionObservability) metrics.executionObservability = executionObservability;
 
   const rawFileObservability = rawMetrics?.fileObservability;
   const readFilePaths = mergeObservedFilePaths([], rawFileObservability?.readFilePaths ?? []);
@@ -200,6 +218,9 @@ export function cloneJobMetrics(metrics: JobMetrics): JobMetrics {
   return {
     ...metrics,
     tokenUsageHighWater: metrics.tokenUsageHighWater ? { ...metrics.tokenUsageHighWater } : undefined,
+    executionObservability: metrics.executionObservability
+      ? { ...metrics.executionObservability }
+      : undefined,
     fileObservability: cloneFileObservability(metrics.fileObservability),
     retrievalObservability: cloneRetrievalObservability(metrics.retrievalObservability),
   };
@@ -257,6 +278,177 @@ function extractTokenUsage(event: unknown): JobTokenMetrics | undefined {
   });
 
   return Object.keys(result).length > 0 ? result : undefined;
+}
+
+function applyExecutionObservability(
+  job: Job,
+  current: JobExecutionObservability | undefined,
+  event: unknown,
+): JobExecutionObservability | undefined {
+  const usage = parseAppServerTokenUsage(event);
+  const completedCommand = parseCompletedCommand(event);
+  if (!usage && !completedCommand) return current;
+
+  const next = normalizeExecutionObservability(current) ?? {
+    evidence: "best_effort_agent_events",
+    tokenUsageUpdateCount: 0,
+    completedCommandCount: 0,
+    uniqueCompletedCommandCount: 0,
+    repeatedCompletedCommandCount: 0,
+    commandOutputCharacters: 0,
+    commandOutputBudgetCharacters: COMMAND_OUTPUT_BUDGET_CHARACTERS,
+    outputBudgetViolationCount: 0,
+    largeCommandOutputCount: 0,
+  };
+  if (usage) {
+    next.tokenUsageUpdateCount += 1;
+    next.cachedInputTokensHighWater = maxTokenValue(
+      next.cachedInputTokensHighWater,
+      usage.cachedInputTokens,
+    );
+    if (usage.inputTokens !== undefined && usage.cachedInputTokens !== undefined) {
+      next.nonCachedInputTokensHighWater = maxTokenValue(
+        next.nonCachedInputTokensHighWater,
+        Math.max(0, usage.inputTokens - usage.cachedInputTokens),
+      );
+    }
+    next.maxSingleCallInputTokens = maxTokenValue(
+      next.maxSingleCallInputTokens,
+      usage.lastInputTokens,
+    );
+    next.maxSingleCallTotalTokens = maxTokenValue(
+      next.maxSingleCallTotalTokens,
+      usage.lastTotalTokens,
+    );
+    next.modelContextWindow = maxTokenValue(next.modelContextWindow, usage.modelContextWindow);
+  }
+  if (completedCommand) {
+    const commandOutputCharacters = completedCommand.outputCharacters;
+    next.completedCommandCount += 1;
+    const fingerprints = completedCommandFingerprints.get(job) ?? new Set<string>();
+    completedCommandFingerprints.set(job, fingerprints);
+    if (completedCommand.fingerprint && fingerprints.has(completedCommand.fingerprint)) {
+      next.repeatedCompletedCommandCount += 1;
+    } else {
+      next.uniqueCompletedCommandCount += 1;
+      if (completedCommand.fingerprint) fingerprints.add(completedCommand.fingerprint);
+    }
+    next.commandOutputCharacters += commandOutputCharacters;
+    next.largestCommandOutputCharacters = maxTokenValue(
+      next.largestCommandOutputCharacters,
+      commandOutputCharacters,
+    );
+    if (commandOutputCharacters > COMMAND_OUTPUT_BUDGET_CHARACTERS) {
+      next.outputBudgetViolationCount += 1;
+    }
+    if (commandOutputCharacters > LARGE_COMMAND_OUTPUT_CHARACTERS) {
+      next.largeCommandOutputCount += 1;
+    }
+  }
+  return next;
+}
+
+function normalizeExecutionObservability(value: unknown): JobExecutionObservability | undefined {
+  if (!isPlainObject(value)) return undefined;
+  const tokenUsageUpdateCount = sanitizeNonNegativeInteger(value.tokenUsageUpdateCount) ?? 0;
+  const completedCommandCount = sanitizeNonNegativeInteger(value.completedCommandCount) ?? 0;
+  const uniqueCompletedCommandCount = sanitizeNonNegativeInteger(
+    value.uniqueCompletedCommandCount,
+  ) ?? completedCommandCount;
+  const repeatedCompletedCommandCount = sanitizeNonNegativeInteger(
+    value.repeatedCompletedCommandCount,
+  ) ?? Math.max(0, completedCommandCount - uniqueCompletedCommandCount);
+  const commandOutputCharacters = sanitizeNonNegativeInteger(value.commandOutputCharacters) ?? 0;
+  const commandOutputBudgetCharacters = sanitizeNonNegativeInteger(
+    value.commandOutputBudgetCharacters,
+  ) ?? COMMAND_OUTPUT_BUDGET_CHARACTERS;
+  const outputBudgetViolationCount = sanitizeNonNegativeInteger(
+    value.outputBudgetViolationCount,
+  ) ?? 0;
+  const largeCommandOutputCount = sanitizeNonNegativeInteger(value.largeCommandOutputCount) ?? 0;
+  const normalized: JobExecutionObservability = {
+    evidence: "best_effort_agent_events",
+    tokenUsageUpdateCount,
+    completedCommandCount,
+    uniqueCompletedCommandCount,
+    repeatedCompletedCommandCount,
+    commandOutputCharacters,
+    commandOutputBudgetCharacters,
+    outputBudgetViolationCount,
+    largeCommandOutputCount,
+  };
+  copyOptionalMetric(value, normalized, "cachedInputTokensHighWater");
+  copyOptionalMetric(value, normalized, "nonCachedInputTokensHighWater");
+  copyOptionalMetric(value, normalized, "maxSingleCallInputTokens");
+  copyOptionalMetric(value, normalized, "maxSingleCallTotalTokens");
+  copyOptionalMetric(value, normalized, "modelContextWindow");
+  copyOptionalMetric(value, normalized, "largestCommandOutputCharacters");
+  return normalized;
+}
+
+function copyOptionalMetric(
+  source: Record<string, unknown>,
+  target: JobExecutionObservability,
+  key: keyof JobExecutionObservability,
+) {
+  const value = sanitizeNonNegativeInteger(source[key]);
+  if (value !== undefined) (target as unknown as Record<string, unknown>)[key] = value;
+}
+
+function parseAppServerTokenUsage(event: unknown) {
+  if (!isPlainObject(event) || event.type !== "app_server_notification" ||
+      event.method !== "thread/tokenUsage/updated" || !isPlainObject(event.params)) {
+    return undefined;
+  }
+  const tokenUsage = event.params.tokenUsage;
+  if (!isPlainObject(tokenUsage)) return undefined;
+  const total = isPlainObject(tokenUsage.total) ? tokenUsage.total : {};
+  const last = isPlainObject(tokenUsage.last) ? tokenUsage.last : {};
+  return {
+    inputTokens: sanitizeNonNegativeInteger(total.inputTokens),
+    cachedInputTokens: sanitizeNonNegativeInteger(total.cachedInputTokens),
+    lastInputTokens: sanitizeNonNegativeInteger(last.inputTokens),
+    lastTotalTokens: sanitizeNonNegativeInteger(last.totalTokens),
+    modelContextWindow: sanitizeNonNegativeInteger(tokenUsage.modelContextWindow),
+  };
+}
+
+function parseCompletedCommand(event: unknown): {
+  outputCharacters: number;
+  fingerprint?: string;
+} | undefined {
+  if (!isPlainObject(event)) return undefined;
+  let item: Record<string, unknown> | undefined;
+  if (event.type === "app_server_notification" && event.method === "item/completed" &&
+      isPlainObject(event.params) && isPlainObject(event.params.item)) {
+    item = event.params.item;
+  } else if ((event.type === "item.completed" || event.type === "item/completed") &&
+      isPlainObject(event.item)) {
+    item = event.item;
+  }
+  if (!item || (item.type !== "commandExecution" && item.type !== "command_execution")) {
+    return undefined;
+  }
+  const output = typeof item.aggregatedOutput === "string"
+    ? item.aggregatedOutput
+    : typeof item.aggregated_output === "string"
+      ? item.aggregated_output
+      : typeof item.output === "string"
+        ? item.output
+        : "";
+  const command = typeof item.command === "string"
+    ? item.command
+    : Array.isArray(item.command)
+      ? item.command.filter((part): part is string => typeof part === "string").join(" ")
+      : "";
+  return {
+    outputCharacters: output.length,
+    fingerprint: command ? normalizeCommandFingerprint(command) : undefined,
+  };
+}
+
+function normalizeCommandFingerprint(command: string) {
+  return command.replaceAll("\\", "/").replace(/\s+/g, " ").trim().toLocaleLowerCase("en-US");
 }
 
 function extractFileObservability(event: unknown): ExtractedFileObservability {
@@ -667,7 +859,7 @@ function isCommandKey(key: string) {
   return /^(command|cmd|args|argv|script)$/i.test(key);
 }
 
-function sanitizeNonNegativeInteger(value: number | undefined) {
+function sanitizeNonNegativeInteger(value: unknown) {
   if (typeof value !== "number" || !Number.isFinite(value) || value < 0) return undefined;
   return Math.round(value);
 }

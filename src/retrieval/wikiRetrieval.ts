@@ -1,12 +1,23 @@
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import {
+  closeSync,
+  existsSync,
+  openSync,
+  readFileSync,
+  readSync,
+  readdirSync,
+  statSync,
+} from "node:fs";
 import path from "node:path";
 import type { Job, JobCommand } from "../jobs/jobTypes.js";
 
 const DEFAULT_MAX_CANDIDATES = 12;
 const MAX_SEEDS = 6;
 const MAX_QUERY_TOKENS = 80;
+const MAX_SUBMITTED_SOURCE_BYTES = 64 * 1024;
+const MAX_SUBMITTED_SOURCE_HEADINGS = 12;
 const MAX_DIAGNOSTIC_SAMPLES = 20;
 const MAX_COMPONENT_SAMPLES = 16;
+const MAX_SELECTION_SAMPLES = 6;
 const OVERSIZED_PAGE_CHARS = 20_000;
 
 const STOP_WORDS = new Set([
@@ -21,8 +32,22 @@ export type RetrievalCandidate = {
   title: string;
   score: number;
   hop: number;
+  role: "knowledge" | "evidence" | "navigation";
+  lifecycle: "current" | "historical" | "superseded" | "unknown";
+  purposes: Array<"evidence" | "impact_review" | "navigation">;
+  selectionReason?: IngestSelectionReason;
   reasons: string[];
 };
+
+type IngestSelectionReason =
+  | "current_authority"
+  | "authority_candidate"
+  | "source_evidence"
+  | "related_map"
+  | "impact_review"
+  | "evidence"
+  | "navigation"
+  | "ranked_fill";
 
 export type RetrievalPartition = {
   scope: string;
@@ -53,6 +78,7 @@ export type WikiRetrievalResult = {
           maintenanceCandidatePaths: string[];
         };
     manifestCharacters: number;
+    candidateSelection?: ReturnType<typeof summarizeSelection>;
     buildMs: number;
   };
 };
@@ -69,12 +95,19 @@ type WikiNode = {
   title: string;
   aliases: string[];
   sources: string[];
+  supersedes: string[];
+  role: RetrievalCandidate["role"];
+  lifecycle: RetrievalCandidate["lifecycle"];
   characters: number;
   terms: Set<string>;
   titleTerms: Set<string>;
-  rawTargets: string[];
+  wikiTargets: string[];
   outgoing: Set<string>;
   incoming: Set<string>;
+  outgoingSources: Set<string>;
+  incomingSources: Set<string>;
+  outgoingSupersedes: Set<string>;
+  incomingSupersedes: Set<string>;
 };
 
 type GraphDiagnostic = {
@@ -93,7 +126,21 @@ type WikiGraph = {
 type CandidateState = {
   score: number;
   hop: number;
+  purposes: Set<RetrievalCandidate["purposes"][number]>;
   reasons: Set<string>;
+};
+
+type RetrievalIntent = {
+  queryTerms: string[];
+  submittedSourceTerms: Set<string>;
+  exactKeys: Set<string>;
+  inputSignal: {
+    mode: "request_text" | "submitted_markdown";
+    fileName?: string;
+    charactersRead?: number;
+    truncated?: boolean;
+    headings?: string[];
+  };
 };
 
 export class WikiRetriever {
@@ -150,6 +197,7 @@ export class WikiRetriever {
                 .map((page) => page.path),
             },
         manifestCharacters: context.length,
+        candidateSelection: searchManifest?.selectionSummary,
         buildMs: Math.round((performance.now() - startedAt) * 10) / 10,
       },
     };
@@ -173,44 +221,40 @@ function buildGraph(wikiRoot: string): WikiGraph {
     const id = metadata.id ?? stem;
     const aliases = parseList(metadata.aliases);
     const sources = parseList(metadata.sources);
+    const supersedes = parseList(metadata.supersedes);
+    const type = metadata.type ?? inferType(relativePath);
     const lexicalText = [id, title, aliases.join(" "), metadata.tags ?? "", body].join("\n");
     const titleTerms = new Set(tokenize([id, title, aliases.join(" ")].join(" ")));
 
     nodes.set(relativePath, {
       path: relativePath,
       id,
-      type: metadata.type ?? inferType(relativePath),
+      type,
       title,
       aliases,
       sources,
+      supersedes,
+      role: classifyNodeRole(type),
+      lifecycle: parseLifecycle(metadata.status),
       characters: content.length,
       terms: new Set(tokenize(lexicalText)),
       titleTerms,
-      rawTargets: [...extractWikiTargets(body), ...sources],
+      wikiTargets: extractWikiTargets(body),
       outgoing: new Set(),
       incoming: new Set(),
+      outgoingSources: new Set(),
+      incomingSources: new Set(),
+      outgoingSupersedes: new Set(),
+      incomingSupersedes: new Set(),
     });
   }
 
   const lookup = makeLookup(nodes);
   const diagnostics: GraphDiagnostic[] = [];
   for (const node of nodes.values()) {
-    for (const rawTarget of node.rawTargets) {
-      const normalized = normalizeTarget(rawTarget);
-      if (!normalized) continue;
-      if (normalized.startsWith("../") || normalized === "..") {
-        diagnostics.push({ kind: "outside_root_target", source: node.path, target: rawTarget });
-        continue;
-      }
-      const matches = lookup.get(normalized) ?? [];
-      if (matches.length === 1) {
-        node.outgoing.add(matches[0]);
-      } else if (matches.length > 1) {
-        diagnostics.push({ kind: "ambiguous_target", source: node.path, target: rawTarget });
-      } else if (shouldDiagnoseMissingTarget(rawTarget)) {
-        diagnostics.push({ kind: "missing_target", source: node.path, target: rawTarget });
-      }
-    }
+    resolveTargets(node, node.wikiTargets, "wiki_link", lookup, nodes, diagnostics);
+    resolveTargets(node, node.sources, "declares_source", lookup, nodes, diagnostics);
+    resolveTargets(node, node.supersedes, "supersedes", lookup, nodes, diagnostics);
   }
 
   for (const node of nodes.values()) {
@@ -222,6 +266,62 @@ function buildGraph(wikiRoot: string): WikiGraph {
   diagnostics.sort((a, b) =>
     a.kind.localeCompare(b.kind) || a.source.localeCompare(b.source) || a.target.localeCompare(b.target));
   return { nodes, paths, diagnostics, indexedCharacters };
+}
+
+function resolveTargets(
+  sourceNode: WikiNode,
+  rawTargets: string[],
+  kind: "wiki_link" | "declares_source" | "supersedes",
+  lookup: Map<string, string[]>,
+  nodes: Map<string, WikiNode>,
+  diagnostics: GraphDiagnostic[],
+) {
+  for (const rawTarget of rawTargets) {
+    const normalized = normalizeTarget(rawTarget);
+    if (!normalized) continue;
+    if (normalized.startsWith("../") || normalized === "..") {
+      diagnostics.push({ kind: "outside_root_target", source: sourceNode.path, target: rawTarget });
+      continue;
+    }
+    const matches = lookup.get(normalized) ?? [];
+    if (matches.length === 1) {
+      const targetPath = matches[0];
+      const targetNode = nodes.get(targetPath);
+      sourceNode.outgoing.add(targetPath);
+      if (kind === "declares_source") {
+        sourceNode.outgoingSources.add(targetPath);
+        targetNode?.incomingSources.add(sourceNode.path);
+      } else if (kind === "supersedes") {
+        sourceNode.outgoingSupersedes.add(targetPath);
+        targetNode?.incomingSupersedes.add(sourceNode.path);
+      }
+    } else if (matches.length > 1) {
+      diagnostics.push({ kind: "ambiguous_target", source: sourceNode.path, target: rawTarget });
+    } else if (shouldDiagnoseMissingTarget(rawTarget)) {
+      diagnostics.push({ kind: "missing_target", source: sourceNode.path, target: rawTarget });
+    }
+  }
+}
+
+function classifyNodeRole(type: string): WikiNode["role"] {
+  if (type === "source") return "evidence";
+  if (type === "index" || type === "map") return "navigation";
+  return "knowledge";
+}
+
+function parseLifecycle(status: string | undefined): WikiNode["lifecycle"] {
+  const normalized = status?.trim().toLocaleLowerCase("en-US");
+  if (normalized === "active" || normalized === "current") return "current";
+  if (normalized === "historical" || normalized === "archived" || normalized === "deprecated") {
+    return "historical";
+  }
+  if (normalized === "superseded") return "superseded";
+  return "unknown";
+}
+
+function effectiveLifecycle(node: WikiNode): WikiNode["lifecycle"] {
+  if (node.incomingSupersedes.size > 0) return "superseded";
+  return node.lifecycle;
 }
 
 function discoverMarkdownPaths(root: string) {
@@ -263,8 +363,9 @@ function makeSearchManifest(
   maxCandidates: number,
   maxHops: 1 | 2,
 ) {
-  const queryTerms = tokenize(content).slice(0, MAX_QUERY_TOKENS);
-  const exactKeys = new Set(extractExactKeys(content));
+  const intent = deriveRetrievalIntent(content, command);
+  const queryTerms = intent.queryTerms;
+  const exactKeys = intent.exactKeys;
   const documentFrequency = new Map<string, number>();
   for (const node of graph.nodes.values()) {
     for (const term of node.terms) {
@@ -295,15 +396,27 @@ function makeSearchManifest(
       const weight = Math.max(1, Math.round(100 * Math.log((graph.nodes.size + 1) / frequency)));
       score += weight;
       if (node.titleTerms.has(term)) score += weight * 2;
+      if (intent.submittedSourceTerms.has(term)) reasons.add("submitted_source_term");
       reasons.add(node.titleTerms.has(term) ? "title_term" : "body_term");
     }
     if (node.path === "index.md" && score > 0) score += 25;
-    if (score > 0) candidates.set(node.path, { score, hop: 0, reasons });
+    if (command === "ingest" && score > 0) {
+      if (node.lifecycle === "current") score += 80;
+      if (node.lifecycle === "historical" || node.lifecycle === "superseded") score -= 80;
+    }
+    if (score > 0) {
+      candidates.set(node.path, {
+        score,
+        hop: 0,
+        purposes: initialPurposes(node, command),
+        reasons,
+      });
+    }
   }
 
-  const seeds = [...candidates.entries()]
-    .sort(compareCandidateState)
-    .slice(0, MAX_SEEDS);
+  const seeds = command === "ingest"
+    ? selectIngestSeeds(candidates, graph, MAX_SEEDS)
+    : [...candidates.entries()].sort(compareCandidateState).slice(0, MAX_SEEDS);
   let frontier = seeds.map(([nodePath]) => nodePath);
   const visited = new Set(frontier);
   for (let hop = 1; hop <= maxHops && frontier.length > 0; hop += 1) {
@@ -312,22 +425,20 @@ function makeSearchManifest(
       const sourceNode = graph.nodes.get(sourcePath);
       const sourceState = candidates.get(sourcePath);
       if (!sourceNode || !sourceState) continue;
-      const neighbors: Array<readonly [string, "outgoing_link" | "incoming_link"]> = [
-        ...[...sourceNode.outgoing].map((target) => [target, "outgoing_link"] as const),
-        ...[...sourceNode.incoming].map((target) => [target, "incoming_link"] as const),
-      ]
-        .sort((a, b) => a[0].localeCompare(b[0]));
-      for (const [target, relation] of neighbors) {
-        const expansionScore = Math.max(1, Math.floor(sourceState.score / (hop === 1 ? 5 : 12)));
+      const neighbors = candidateNeighbors(sourceNode, graph, command);
+      for (const [target, relation, purpose, divisor] of neighbors) {
+        const expansionScore = Math.max(1, Math.floor(sourceState.score / (hop === 1 ? divisor : divisor * 2)));
         const existing = candidates.get(target);
         if (!existing || expansionScore > existing.score) {
           candidates.set(target, {
             score: Math.max(existing?.score ?? 0, expansionScore),
             hop: Math.min(existing?.hop ?? hop, hop),
+            purposes: new Set([...(existing?.purposes ?? []), purpose]),
             reasons: new Set([...(existing?.reasons ?? []), relation]),
           });
         } else {
           existing.reasons.add(relation);
+          existing.purposes.add(purpose);
           existing.hop = Math.min(existing.hop, hop);
         }
         if (!visited.has(target)) {
@@ -340,32 +451,325 @@ function makeSearchManifest(
   }
 
   if (candidates.size === 0 && graph.nodes.has("index.md")) {
-    candidates.set("index.md", { score: 1, hop: 0, reasons: new Set(["index_fallback"]) });
+    candidates.set("index.md", {
+      score: 1,
+      hop: 0,
+      purposes: new Set(["navigation"]),
+      reasons: new Set(["index_fallback"]),
+    });
   }
 
-  const ranked: RetrievalCandidate[] = [...candidates.entries()]
-    .sort(compareCandidateState)
-    .slice(0, maxCandidates)
-    .map(([nodePath, state]) => {
+  const selection = command === "ingest"
+    ? selectIngestCandidates(candidates, graph, maxCandidates)
+    : {
+        selected: [...candidates.entries()].sort(compareCandidateState).slice(0, maxCandidates)
+          .map(([nodePath, state]) => ({ nodePath, state, selectionReason: undefined })),
+        excluded: { total: Math.max(0, candidates.size - maxCandidates), byReason: {}, samples: [] },
+      };
+  const ranked: RetrievalCandidate[] = selection.selected
+    .map(({ nodePath, state, selectionReason }) => {
       const node = graph.nodes.get(nodePath)!;
+      const lifecycle = effectiveLifecycle(node);
+      const purposes = [...effectivePurposes(node, state)].sort();
       return {
         path: node.path,
         type: node.type,
         title: node.title,
         score: state.score,
         hop: state.hop,
+        role: node.role,
+        lifecycle,
+        purposes,
+        ...(selectionReason ? { selectionReason } : {}),
         reasons: [...state.reasons].sort(),
       };
     });
 
   return {
-    version: 1,
-    strategy: "lexical_seed_plus_bidirectional_graph",
+    version: 2,
+    strategy: command === "ingest"
+      ? "typed_ingest_evidence_and_impact"
+      : "lexical_seed_plus_bidirectional_graph",
     command,
     sourceOfTruth: "Markdown files under index.md and wiki/**/*.md",
+    inputSignal: intent.inputSignal,
     candidates: ranked,
+    selectionSummary: summarizeSelection(ranked, selection.excluded),
     unresolved: ranked.length === 0,
-    limits: { maxCandidates, maxHops, bodySnippetsIncluded: false },
+    limits: {
+      maxCandidates,
+      maxHops,
+      bodySnippetsIncluded: false,
+      maxCommandOutputCharacters: 12_000,
+      maxLinesPerRead: 200,
+      expansionBatchSize: 4,
+      maxBatchPaths: 4,
+      maxBatchLinesPerPath: 50,
+      maxLogVerificationReadsPerWrite: 1,
+    },
+  };
+}
+
+function initialPurposes(node: WikiNode, command: "query" | "ingest") {
+  const purposes = new Set<RetrievalCandidate["purposes"][number]>();
+  if (node.role === "navigation") purposes.add("navigation");
+  else if (command === "ingest" && node.role === "knowledge") purposes.add("impact_review");
+  else purposes.add("evidence");
+  return purposes;
+}
+
+function candidateNeighbors(
+  node: WikiNode,
+  graph: WikiGraph,
+  command: "query" | "ingest",
+): Array<readonly [string, string, RetrievalCandidate["purposes"][number], number]> {
+  if (command === "query") {
+    return [
+      ...[...node.outgoing].map((target) => [target, "outgoing_link", purposeFor(graph, target), 5] as const),
+      ...[...node.incoming].map((target) => [target, "incoming_link", purposeFor(graph, target), 5] as const),
+    ].sort(compareNeighbor);
+  }
+
+  const typed = new Map<string, readonly [string, string, RetrievalCandidate["purposes"][number], number]>();
+  const add = (
+    target: string,
+    relation: string,
+    purpose: RetrievalCandidate["purposes"][number],
+    divisor: number,
+  ) => {
+    const key = `${target}\0${relation}`;
+    typed.set(key, [target, relation, purpose, divisor]);
+  };
+  for (const target of node.outgoingSources) add(target, "declared_source", "evidence", 3);
+  for (const target of node.incomingSources) add(target, "compiled_from_source", "impact_review", 3);
+  for (const target of node.outgoingSupersedes) add(target, "superseded_evidence", "evidence", 4);
+  for (const target of node.incomingSupersedes) {
+    add(target, "superseding_candidate", purposeFor(graph, target, true), 3);
+  }
+  for (const target of node.outgoing) {
+    add(target, "outgoing_link", purposeFor(graph, target), 8);
+  }
+  for (const target of node.incoming) {
+    add(target, "incoming_link", purposeFor(graph, target), 8);
+  }
+  return [...typed.values()].sort(compareNeighbor);
+}
+
+function purposeFor(
+  graph: WikiGraph,
+  target: string,
+  allowImpact = false,
+): RetrievalCandidate["purposes"][number] {
+  const node = graph.nodes.get(target);
+  if (node?.role === "navigation") return "navigation";
+  if (allowImpact && node?.role === "knowledge") return "impact_review";
+  return "evidence";
+}
+
+function compareNeighbor(
+  a: readonly [string, string, RetrievalCandidate["purposes"][number], number],
+  b: readonly [string, string, RetrievalCandidate["purposes"][number], number],
+) {
+  return a[0].localeCompare(b[0]) || a[1].localeCompare(b[1]);
+}
+
+function effectivePurposes(node: WikiNode, state: CandidateState) {
+  const lifecycle = effectiveLifecycle(node);
+  const purposes = new Set(state.purposes);
+  if ((lifecycle === "historical" || lifecycle === "superseded") &&
+      purposes.delete("impact_review")) {
+    purposes.add("evidence");
+  }
+  return purposes;
+}
+
+function selectIngestSeeds(
+  candidates: Map<string, CandidateState>,
+  graph: WikiGraph,
+  maxSeeds: number,
+) {
+  const ranked = [...candidates.entries()].sort(compareCandidateState);
+  const selected: Array<[string, CandidateState]> = [];
+  const seen = new Set<string>();
+  const take = (predicate: (entry: [string, CandidateState]) => boolean) => {
+    for (const entry of ranked) {
+      if (selected.length >= maxSeeds) break;
+      if (seen.has(entry[0]) || !predicate(entry)) continue;
+      selected.push(entry);
+      seen.add(entry[0]);
+      break;
+    }
+  };
+  take(([nodePath]) => {
+    const node = graph.nodes.get(nodePath)!;
+    return node.role === "knowledge" && effectiveLifecycle(node) === "current";
+  });
+  take(([nodePath]) => graph.nodes.get(nodePath)?.role === "evidence");
+  take(([nodePath]) => graph.nodes.get(nodePath)?.type === "map");
+  for (const entry of ranked) {
+    if (selected.length >= maxSeeds) break;
+    if (seen.has(entry[0])) continue;
+    selected.push(entry);
+    seen.add(entry[0]);
+  }
+  return selected;
+}
+
+function selectIngestCandidates(
+  candidates: Map<string, CandidateState>,
+  graph: WikiGraph,
+  maxCandidates: number,
+) {
+  const ranked = [...candidates.entries()].sort(compareCandidateState);
+  const selected: Array<{
+    nodePath: string;
+    state: CandidateState;
+    selectionReason: IngestSelectionReason;
+  }> = [];
+  const seen = new Set<string>();
+  const eligible = ranked.filter(([nodePath, state]) =>
+    effectivePurposes(graph.nodes.get(nodePath)!, state).size > 0);
+  const takeOne = (
+    predicate: (entry: [string, CandidateState]) => boolean,
+    reason: IngestSelectionReason,
+    sorter?: (a: [string, CandidateState], b: [string, CandidateState]) => number,
+  ) => {
+    if (selected.length >= maxCandidates) return;
+    const choices = eligible.filter((entry) => !seen.has(entry[0]) && predicate(entry));
+    if (sorter) choices.sort(sorter);
+    const entry = choices[0];
+    if (!entry) return;
+    selected.push({ nodePath: entry[0], state: entry[1], selectionReason: reason });
+    seen.add(entry[0]);
+  };
+  const takeAll = (
+    predicate: (entry: [string, CandidateState]) => boolean,
+    reason: IngestSelectionReason,
+    limit = Number.POSITIVE_INFINITY,
+  ) => {
+    let taken = 0;
+    for (const entry of eligible) {
+      if (selected.length >= maxCandidates || taken >= limit) break;
+      if (seen.has(entry[0]) || !predicate(entry)) continue;
+      selected.push({ nodePath: entry[0], state: entry[1], selectionReason: reason });
+      seen.add(entry[0]);
+      taken += 1;
+    }
+  };
+
+  takeOne(([nodePath]) => {
+    const node = graph.nodes.get(nodePath)!;
+    return node.role === "knowledge" && effectiveLifecycle(node) === "current";
+  }, "current_authority");
+  if (!selected.some((candidate) => candidate.selectionReason === "current_authority")) {
+    takeOne(([nodePath]) => {
+      const node = graph.nodes.get(nodePath)!;
+      return node.role === "knowledge" && effectiveLifecycle(node) === "unknown";
+    }, "authority_candidate");
+  }
+  takeOne(
+    ([nodePath]) => graph.nodes.get(nodePath)?.role === "evidence",
+    "source_evidence",
+    (a, b) => compareSelectionConnection(a, b, selected, graph),
+  );
+  takeOne(
+    ([nodePath]) => graph.nodes.get(nodePath)?.type === "map",
+    "related_map",
+    (a, b) => compareSelectionConnection(a, b, selected, graph, true),
+  );
+  takeAll(([nodePath, state]) => {
+    const node = graph.nodes.get(nodePath)!;
+    return effectivePurposes(node, state).has("impact_review");
+  }, "impact_review");
+  takeAll(([nodePath, state]) => {
+    const node = graph.nodes.get(nodePath)!;
+    return node.role !== "evidence" && effectivePurposes(node, state).has("evidence");
+  }, "evidence");
+  const sourceEvidenceLimit = Math.max(1, Math.floor(maxCandidates / 3));
+  const selectedSourceEvidence = selected.filter((candidate) =>
+    graph.nodes.get(candidate.nodePath)?.role === "evidence").length;
+  takeAll(([nodePath, state]) => {
+    const node = graph.nodes.get(nodePath)!;
+    return node.role === "evidence" && effectivePurposes(node, state).has("evidence");
+  }, "evidence", Math.max(0, sourceEvidenceLimit - selectedSourceEvidence));
+  takeAll(([nodePath, state]) => effectivePurposes(graph.nodes.get(nodePath)!, state).has("navigation"),
+    "navigation");
+  takeAll(([nodePath]) => graph.nodes.get(nodePath)?.role !== "evidence", "ranked_fill");
+
+  const excludedCandidates = ranked.filter(([nodePath]) => !seen.has(nodePath));
+  const excluded = {
+    total: excludedCandidates.length,
+    byReason: {} as Record<string, number>,
+    samples: [] as Array<{ path: string; reason: string }>,
+  };
+  for (const [nodePath, state] of excludedCandidates) {
+    const reason = effectivePurposes(graph.nodes.get(nodePath)!, state).size === 0
+      ? "no_effective_purpose"
+      : "candidate_budget";
+    excluded.byReason[reason] = (excluded.byReason[reason] ?? 0) + 1;
+    if (excluded.samples.length < MAX_SELECTION_SAMPLES) excluded.samples.push({ path: nodePath, reason });
+  }
+  return { selected, excluded };
+}
+
+function isConnectedToSelection(
+  nodePath: string,
+  selected: Array<{ nodePath: string }>,
+  graph: WikiGraph,
+) {
+  const node = graph.nodes.get(nodePath);
+  if (!node) return false;
+  return selected.some((candidate) => node.outgoing.has(candidate.nodePath) ||
+    node.incoming.has(candidate.nodePath));
+}
+
+function compareSelectionConnection(
+  a: [string, CandidateState],
+  b: [string, CandidateState],
+  selected: Array<{ nodePath: string }>,
+  graph: WikiGraph,
+  compareTitleOverlap = false,
+) {
+  return Number(isConnectedToSelection(b[0], selected, graph)) -
+    Number(isConnectedToSelection(a[0], selected, graph)) ||
+    (compareTitleOverlap
+      ? selectionTitleOverlap(b[0], selected, graph) - selectionTitleOverlap(a[0], selected, graph)
+      : 0) ||
+    compareCandidateState(a, b);
+}
+
+function selectionTitleOverlap(
+  nodePath: string,
+  selected: Array<{ nodePath: string }>,
+  graph: WikiGraph,
+) {
+  const node = graph.nodes.get(nodePath);
+  if (!node) return 0;
+  let largest = 0;
+  for (const candidate of selected) {
+    const selectedNode = graph.nodes.get(candidate.nodePath);
+    if (!selectedNode) continue;
+    let overlap = 0;
+    for (const term of node.titleTerms) {
+      if (selectedNode.titleTerms.has(term)) overlap += 1;
+    }
+    largest = Math.max(largest, overlap);
+  }
+  return largest;
+}
+
+function summarizeSelection(
+  candidates: RetrievalCandidate[],
+  excluded: { total: number; byReason: Record<string, number>; samples: Array<{ path: string; reason: string }> },
+) {
+  return {
+    evidence: candidates.filter((candidate) => candidate.purposes.includes("evidence")).length,
+    impactReview: candidates.filter((candidate) => candidate.purposes.includes("impact_review")).length,
+    navigation: candidates.filter((candidate) => candidate.purposes.includes("navigation")).length,
+    slots: Object.fromEntries(candidates.map((candidate) => candidate.selectionReason)
+      .filter((reason): reason is IngestSelectionReason => Boolean(reason))
+      .map((reason) => [reason, candidates.filter((candidate) => candidate.selectionReason === reason).length])),
+    excluded,
   };
 }
 
@@ -445,6 +849,8 @@ function searchPolicy(command: JobCommand) {
     "Keep mechanical searches bounded to index.md and wiki/**/*.md. Never run a generic recursive search from '.'.",
     "Do not read log.md, raw/**, or assets by default. Escalate to one specific raw source only when an explicit source id/path or unresolved provenance check requires it.",
     "Do not dump an entire large file into context: locate headings or matches first, then read only the relevant range.",
+    "Keep each search or read result under 200 lines and approximately 12,000 characters. If that cap is reached, narrow the pattern or range before continuing.",
+    "Never print a whole multi-file git diff. Inspect --stat or --numstat first, then use path-scoped bounded diffs.",
   ];
   if (command === "lint") {
     common.push(
@@ -457,6 +863,15 @@ function searchPolicy(command: JobCommand) {
       "If candidates are insufficient, perform a bounded exact/lexical search only within index.md and wiki/**/*.md and state why expansion was needed.",
       "Page splitting due solely to the 20,000-character threshold belongs to /lint, not this command.",
     );
+    if (command === "ingest") {
+      common.push(
+        "Treat evidence candidates as comparison/provenance inputs and impact_review candidates only as pages to review for possible updates, not as an instruction to modify them.",
+        "Before expanding beyond the offered candidates, record the missing authority or relation, inspect at most four new paths, and then reassess the evidence and update sets.",
+        "A multi-path batch may inspect only frontmatter, headings, or bounded matches for at most four paths and 50 lines per path. Review one document body section at a time; never concatenate multiple document bodies into one command output.",
+        "If a prior log entry matters, do one targeted lookup during planning. After writing log.md, verify it once with a targeted match or bounded tail; do not read it again until another log write or a mismatch requires diagnosis.",
+        "Maintain a compact ledger of accepted evidence, rejected candidates, possible update targets, and remaining verification instead of carrying full command output forward.",
+      );
+    }
   }
   common.push("</wiki_search_policy>");
   return common.join("\n");
@@ -565,6 +980,70 @@ function extractExactKeys(content: string) {
   const trimmed = normalizeTarget(content);
   if (trimmed && trimmed.length <= 160) keys.add(trimmed);
   return [...keys];
+}
+
+function deriveRetrievalIntent(
+  content: string,
+  command: "query" | "ingest",
+): RetrievalIntent {
+  const submitted = command === "ingest" ? readSubmittedMarkdown(content) : undefined;
+  const sourceText = submitted?.text ?? (command === "ingest" ? content : "");
+  const submittedSourceTerms = new Set(tokenize(sourceText));
+  const queryTerms = tokenize([content, sourceText].filter(Boolean).join("\n"))
+    .slice(0, MAX_QUERY_TOKENS);
+  const exactKeys = new Set([
+    ...extractExactKeys(content),
+    ...extractExactKeys(sourceText),
+  ]);
+  return {
+    queryTerms,
+    submittedSourceTerms,
+    exactKeys,
+    inputSignal: submitted
+      ? {
+          mode: "submitted_markdown",
+          fileName: submitted.fileName,
+          charactersRead: submitted.text.length,
+          truncated: submitted.truncated,
+          headings: extractHeadings(submitted.text),
+        }
+      : { mode: "request_text" },
+  };
+}
+
+function readSubmittedMarkdown(content: string) {
+  const candidate = content.trim().replace(/^(?:"([\s\S]+)"|'([\s\S]+)')$/, "$1$2");
+  if (!candidate || /[\r\n]/.test(candidate) || !path.isAbsolute(candidate)) return undefined;
+  if (path.extname(candidate).toLocaleLowerCase("en-US") !== ".md") return undefined;
+
+  let descriptor: number | undefined;
+  try {
+    const stats = statSync(candidate);
+    if (!stats.isFile()) return undefined;
+    descriptor = openSync(candidate, "r");
+    const buffer = Buffer.alloc(Math.min(MAX_SUBMITTED_SOURCE_BYTES, Math.max(1, stats.size)));
+    const bytesRead = readSync(descriptor, buffer, 0, buffer.length, 0);
+    return {
+      fileName: path.basename(candidate),
+      text: buffer.subarray(0, bytesRead).toString("utf8"),
+      truncated: stats.size > bytesRead,
+    };
+  } catch {
+    return undefined;
+  } finally {
+    if (descriptor !== undefined) closeSync(descriptor);
+  }
+}
+
+function extractHeadings(content: string) {
+  const headings: string[] = [];
+  for (const match of content.matchAll(/^#{1,3}\s+(.+)$/gm)) {
+    const heading = match[1].trim();
+    if (!heading || headings.includes(heading)) continue;
+    headings.push(heading);
+    if (headings.length >= MAX_SUBMITTED_SOURCE_HEADINGS) break;
+  }
+  return headings;
 }
 
 function tokenize(value: string) {

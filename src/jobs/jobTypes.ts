@@ -27,6 +27,25 @@ export type JobTokenMetrics = {
   totalTokens?: number;
 };
 
+export type JobExecutionObservability = {
+  /** Best-effort interpretation of app-server usage and completed command events. */
+  evidence: "best_effort_agent_events";
+  tokenUsageUpdateCount: number;
+  cachedInputTokensHighWater?: number;
+  nonCachedInputTokensHighWater?: number;
+  maxSingleCallInputTokens?: number;
+  maxSingleCallTotalTokens?: number;
+  modelContextWindow?: number;
+  completedCommandCount: number;
+  uniqueCompletedCommandCount: number;
+  repeatedCompletedCommandCount: number;
+  commandOutputCharacters: number;
+  commandOutputBudgetCharacters: number;
+  outputBudgetViolationCount: number;
+  largestCommandOutputCharacters?: number;
+  largeCommandOutputCount: number;
+};
+
 export type JobFileObservability = {
   readFilePaths?: string[];
   writeFilePaths?: string[];
@@ -37,7 +56,9 @@ export type JobRetrievalCoverage = {
   offered: number;
   opened: number;
   searched: number;
+  used: number;
   untouched: number;
+  useRatio: number | null;
 };
 
 export type JobRetrievalPartitionCoverage = {
@@ -63,6 +84,13 @@ export type JobRetrievalObservability = {
   observedMaintenanceCandidatePaths?: string[];
   otherObservedReadPaths?: string[];
   excludedPathAccesses?: string[];
+  /** Compatibility counter for every search command that names an excluded path. */
+  excludedPathSearchCount: number;
+  /** Policy-relevant broad, recursive, wildcard, or unbounded excluded-path access. */
+  broadExcludedPathAccessCount: number;
+  targetedProvenanceReadCount: number;
+  runtimeLogVerificationCount: number;
+  repeatedReadCommandCount: number;
   searchCommandCount: number;
   broadRootSearchCount: number;
   largestSearchOutputCharacters?: number;
@@ -79,6 +107,7 @@ export type JobMetrics = {
    * This is not summed billing usage.
    */
   tokenUsageHighWater?: JobTokenMetrics;
+  executionObservability?: JobExecutionObservability;
   fileObservability?: JobFileObservability;
   retrievalObservability?: JobRetrievalObservability;
 };

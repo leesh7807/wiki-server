@@ -7,6 +7,10 @@ knowledge rather than runtime output.
   `log.md`.
 - Preserve accepted source material under `raw/` and source records under
   `wiki/sources/` before relying on compiled pages.
+- On compiled pages, `current_source` identifies the latest accepted source
+  that established the page's current state; it does not by itself replace a
+  broader product or design authority. Keep all material provenance in
+  `sources` and state split authority explicitly in the page body.
 - Store compiled knowledge in the appropriate `wiki/` category. Add or adjust
   categories when the current structure is inadequate.
 - `/query` gathers scoped evidence. `/ingest` preserves and compiles supplied

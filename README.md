@@ -49,6 +49,9 @@ Defaults:
 - Retrieval: deterministic Markdown graph routing is enabled by default. It
   excludes `log.md`, `raw/**`, and assets from normal search context; set
   `WIKI_GRAPH_RETRIEVAL=0` to disable it
+- Event storage: large event payloads are compressed inside the existing
+  `raw-events/<jobId>.jsonl` file and transparently restored by the API; set
+  `WIKI_SERVER_COMPRESS_EVENT_LOGS=0` to keep new records fully plain JSON
 
 Open the local client at `http://127.0.0.1:55173/client`.
 
@@ -92,9 +95,12 @@ copy that guide when the app reports a port fallback.
 `eventsUrl`. Read successful answers from `result.lastAgentMessage`.
 
 Job `metrics.retrievalObservability` summarizes best-effort retrieval use from
-raw agent events: candidate opens/searches, lint partition coverage, broad-root
-searches, excluded-path access, and the largest observed search output. It is
-mechanical observability rather than a definitive file-read or quality ledger.
+agent events: candidate use ratio, lint partition coverage, broad-root and broad
+excluded-path access, targeted provenance/log checks, repeated reads, and the
+largest observed search output. `metrics.executionObservability` separately
+records the 12,000-character output budget, violations, repeated completed
+commands, and token/context high-water values. These are mechanical signals,
+not a definitive file-read ledger, model-call count, or billing usage.
 
 ## Validation
 
@@ -118,3 +124,19 @@ only a small first-run scaffold. The installed operational wiki is independently
 versioned, can be opened from the Wiki screen, and remains after app updates or
 uninstall. Historical migration details are in
 `docs/migration-from-wiki-tools.md`.
+
+The Wiki screen can explicitly import an operational wiki from any Git remote
+understood by the system Git client, including GitHub, GitLab, private HTTPS,
+and SSH remotes. Import clones and validates `AGENTS.md`, `index.md`, and
+`wiki/` in same-volume staging, previews content changes and the timestamped
+backup path, then stops the local server for an atomic rename-based swap. The
+existing wiki is never overwritten or deleted. Pull is manual and is offered
+only after a fetch proves that a clean worktree can fast-forward.
+
+On Windows, import uses a short sibling staging path and enables Git
+`core.longpaths` for clone and the imported repository. Deep user-owned asset
+paths therefore do not fail merely because staging adds another long prefix.
+
+Authentication belongs to Git Credential Manager or SSH. The app rejects
+credentials embedded in HTTPS URLs and redacts credential-shaped log content;
+it never stores access tokens, passwords, or SSH keys in Wiki Server settings.

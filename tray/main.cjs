@@ -24,6 +24,10 @@ const {
   makeObsidianOpenUri,
 } = require("./wiki/wiki-workspace.cjs");
 const { ensurePackagedWikiRoot } = require("./wiki/wiki-installation.cjs");
+const {
+  createGitRemoteService,
+  redactSensitiveText,
+} = require("./wiki/git-remote.cjs");
 
 const packageRoot = path.resolve(__dirname, "..");
 const packagedDataRoot = path.join(
@@ -91,6 +95,8 @@ let status = "starting";
 let externallyManaged = false;
 let quitting = false;
 let workspaceStateCache = null;
+let wikiManagementActive = false;
+const gitRemote = createGitRemoteService({ wikiRoot: configuredWikiRoot });
 
 const hasLock = app.requestSingleInstanceLock();
 if (!hasLock) {
@@ -136,6 +142,7 @@ app.on("window-all-closed", () => {});
 
 app.on("before-quit", () => {
   quitting = true;
+  gitRemote.discardImports();
   stopServer();
 });
 
@@ -195,28 +202,37 @@ async function startServer() {
 }
 
 function stopServer() {
+  void stopServerSafely();
+}
+
+async function stopServerSafely() {
   if (!serverProcess || externallyManaged) {
     return;
   }
 
+  const child = serverProcess;
   const pid = serverProcess.pid;
   appendLog(`[tray] stopping server pid=${pid}\n`);
-
-  if (process.platform === "win32") {
-    spawn("taskkill", ["/pid", String(pid), "/T", "/F"], { windowsHide: true });
-  } else {
-    serverProcess.kill("SIGTERM");
+  const exited = new Promise((resolve) => child.once("exit", resolve));
+  child.kill("SIGTERM");
+  const graceful = await Promise.race([exited.then(() => true), delay(8000).then(() => false)]);
+  if (!graceful && child.exitCode === null) {
+    appendLog(`[tray] server did not stop within the grace period; terminating pid=${pid}\n`);
+    if (process.platform === "win32") {
+      spawn("taskkill", ["/pid", String(pid), "/T", "/F"], { windowsHide: true });
+    } else {
+      child.kill("SIGKILL");
+    }
+    await Promise.race([exited, delay(3000)]);
   }
-
-  serverProcess = null;
+  if (serverProcess === child) serverProcess = null;
   status = "stopped";
   updateMenu();
 }
 
 async function restartServer() {
-  stopServer();
+  await stopServerSafely();
   externallyManaged = false;
-  await delay(600);
   await startServer();
 }
 
@@ -296,6 +312,11 @@ function registerDesktopHandlers() {
       port,
       portWarning,
       integrationGuide: makeIntegrationGuide(serverUrl),
+      wikiRootMode: process.env.WIKI_ROOT
+        ? "WIKI_ROOT override"
+        : app.isPackaged
+          ? "Managed install"
+          : "Development sibling",
     },
   }));
   ipcMain.handle("desktop:metrics", () => requestApi("GET", "/metrics/jobs"));
@@ -334,6 +355,20 @@ function registerDesktopHandlers() {
   ipcMain.handle("desktop:set-auto-launch", (_event, enabled) =>
     setAutoLaunch(Boolean(enabled)));
   ipcMain.handle("desktop:workspace", () => getDesktopWorkspaceState());
+  ipcMain.handle("desktop:git-prepare-import", (_event, remoteUrl) =>
+    withWikiManagementLock(() => gitRemote.prepareImport(remoteUrl)));
+  ipcMain.handle("desktop:git-apply-import", (_event, id) => {
+    if (typeof id !== "string" || !/^[0-9a-f-]{36}$/i.test(id)) {
+      throw new Error("Invalid import preview id");
+    }
+    return withWikiManagementLock(() =>
+      withWikiServerStopped(() => gitRemote.applyImport(id)));
+  });
+  ipcMain.handle("desktop:git-check-pull", () =>
+    withWikiManagementLock(() => gitRemote.checkPull()));
+  ipcMain.handle("desktop:git-pull", () =>
+    withWikiManagementLock(() =>
+      withWikiServerStopped(() => gitRemote.fastForwardPull())));
   ipcMain.handle("desktop:open-obsidian", async () => {
     const obsidian = getObsidianState(configuredWikiRoot);
     if (!obsidian.installed) {
@@ -357,6 +392,7 @@ function getDesktopWorkspaceState() {
   }
   const value = {
     git: getWikiGitState(configuredWikiRoot),
+    gitRemote: gitRemote.state(),
     obsidian: getObsidianState(configuredWikiRoot),
   };
   workspaceStateCache = { createdAt: Date.now(), value };
@@ -417,8 +453,43 @@ function openClient() {
 }
 
 function appendLog(chunk) {
-  rotateLogIfNeeded(Buffer.byteLength(chunk));
-  fs.appendFile(logPath, chunk, () => {});
+  const safeChunk = redactSensitiveText(Buffer.isBuffer(chunk) ? chunk.toString("utf8") : String(chunk));
+  rotateLogIfNeeded(Buffer.byteLength(safeChunk));
+  fs.appendFile(logPath, safeChunk, () => {});
+}
+
+async function withWikiServerStopped(operation) {
+  if (externallyManaged) {
+    throw new Error("Cannot change the wiki while an externally managed server is running.");
+  }
+  if (await isHealthy()) {
+    const metrics = await requestApi("GET", "/metrics/jobs");
+    const queued = metrics?.counts?.queued || 0;
+    const running = metrics?.counts?.running || 0;
+    if (queued || running) {
+      throw new Error("Wait for queued and running wiki jobs to finish before changing the operational wiki.");
+    }
+  }
+  await stopServerSafely();
+  try {
+    const result = await operation();
+    workspaceStateCache = null;
+    return result;
+  } finally {
+    await startServer();
+  }
+}
+
+async function withWikiManagementLock(operation) {
+  if (wikiManagementActive) {
+    throw new Error("Another Git remote operation is already running.");
+  }
+  wikiManagementActive = true;
+  try {
+    return await operation();
+  } finally {
+    wikiManagementActive = false;
+  }
 }
 
 function rotateLogIfNeeded(incomingBytes) {

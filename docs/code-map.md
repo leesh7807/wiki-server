@@ -48,6 +48,7 @@ is to hide ownership.
 | Electron server endpoint and port behavior | `tray/server/` | tests beside each module |
 | Login/startup integration | `tray/system/` | tests beside each module |
 | Operational wiki and Obsidian integration | `tray/wiki/` | tests beside each module |
+| Generic Git remote import, backup swap, and guarded fast-forward pull | `tray/wiki/git-remote.cjs` | `git-remote.test.cjs` and desktop contract tests |
 | Window/tray lifecycle and IPC registration | `tray/main.cjs` | `desktop/desktop.test.cjs` plus tray tests |
 | Dedicated renderer state and views | `desktop/app.js` | `desktop/desktop.test.cjs` |
 | First-install wiki structure | `wiki-template/` | `tray/wiki-repository.test.cjs` |

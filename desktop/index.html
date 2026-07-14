@@ -97,24 +97,43 @@
 
       <section id="wikiView" class="view">
         <div class="wiki-hero paper">
-          <p class="eyebrow">Owned knowledge root</p>
-          <h3>이 앱이 위키와 실행 기록을 함께 관리합니다.</h3>
-          <p class="lead">외부 저장소는 HTTP 계약을 통해 자료를 전달하고, 위키의 실제 파일과 작업 기록은 로컬에 남습니다.</p>
+          <p class="eyebrow">Operational workspace</p>
+          <h3>운영 위키의 위치와 연결 상태를 관리합니다.</h3>
+          <p class="lead">위키 콘텐츠는 사용자 소유로 로컬에 보존됩니다. 앱은 서버 실행 기록과 명시적으로 요청한 Git 작업만 관리합니다.</p>
         </div>
         <div class="info-grid">
           <article class="paper info-card">
             <p class="eyebrow">Operational wiki</p><p id="wikiRoot" class="path-value">—</p><span id="wikiSource" class="quiet-badge">—</span>
-            <div class="button-row"><button id="openWikiButton" class="text-button">Open wiki folder</button><button id="openObsidianButton" class="text-button">Open in Obsidian</button></div>
+            <div class="button-row"><button id="openWikiButton" class="text-button">위키 폴더 열기</button><button id="openObsidianButton" class="text-button">Obsidian에서 열기</button></div>
             <p id="obsidianStatus" class="setting-message left-message"></p>
           </article>
-          <article class="paper info-card"><p class="eyebrow">Runtime data</p><p id="dataRoot" class="path-value">—</p><button id="openDataButton" class="text-button">Open runtime folder</button></article>
+          <article class="paper info-card"><p class="eyebrow">Runtime data</p><p id="dataRoot" class="path-value">—</p><button id="openDataButton" class="text-button">런타임 폴더 열기</button></article>
           <article class="paper info-card wide-card">
             <p class="eyebrow">Local version history</p>
-            <div class="git-summary"><div><span>Branch</span><strong id="gitBranch">—</strong></div><div><span>HEAD</span><strong id="gitHead">—</strong></div><div><span>Commits</span><strong id="gitCommits">—</strong></div><div><span>State</span><strong id="gitState">—</strong></div></div>
+            <div class="git-summary sync-summary"><div><span>Origin</span><strong id="gitOrigin">—</strong></div><div><span>Branch</span><strong id="gitBranch">—</strong></div><div><span>HEAD</span><strong id="gitHead">—</strong></div><div><span>Worktree</span><strong id="gitState">—</strong></div><div><span>Commits</span><strong id="gitCommits">—</strong></div><div><span>Sync</span><strong id="gitSyncState">—</strong></div></div>
+            <div class="button-row sync-actions"><button id="checkPullButton" class="secondary-button">원격 상태 확인</button><button id="pullButton" class="secondary-button sync-pull-button" disabled>Fast-forward pull</button></div>
+            <p id="pullMessage" class="setting-message left-message operation-message" aria-live="polite"></p>
           </article>
+          <details class="paper info-card wide-card git-import-card">
+            <summary class="import-entry"><div><p class="eyebrow">Git remote</p><h3>Git remote에서 가져오기</h3><p>기존 위키를 backup한 뒤 검증된 원격 저장소로 교체합니다.</p></div><span class="quiet-badge">GitHub · GitLab · private Git · HTTPS · SSH</span></summary>
+            <div class="git-import-body">
+              <p class="lead compact-lead">인증은 시스템 Git Credential Manager 또는 SSH가 처리합니다. 토큰, 비밀번호, SSH 키를 URL에 넣지 마세요.</p>
+              <label for="gitRemoteUrl">Remote URL</label>
+              <div class="remote-input-row"><input id="gitRemoteUrl" type="text" autocomplete="off" spellcheck="false" placeholder="https://git.example.com/team/wiki.git 또는 git@example.com:team/wiki.git"><button id="validateImportButton" class="secondary-button">Clone 후 검증</button></div>
+              <p id="importMessage" class="setting-message left-message operation-message" aria-live="polite"></p>
+              <div id="importPreview" class="import-preview" hidden>
+                <div class="git-summary import-summary"><div><span>Validation</span><strong id="importValidation">—</strong></div><div><span>Branch</span><strong id="importBranch">—</strong></div><div><span>HEAD</span><strong id="importHead">—</strong></div><div><span>Changes</span><strong id="importChangeSummary">—</strong></div></div>
+                <p class="trust-warning"><strong>신뢰 경고</strong><span id="importTrustWarning"></span></p>
+                <div class="backup-notice"><span>현재 위키 backup</span><code id="importBackupPath">—</code></div>
+                <pre id="importChanges" class="change-preview"></pre>
+                <label class="confirmation-row" for="importConfirmation"><input id="importConfirmation" type="checkbox"><span>원격 AGENTS.md가 agent 실행 정책이 되며 위 위치에 현재 위키 backup을 보존하는 것을 확인했습니다.</span></label>
+                <button id="applyImportButton" class="primary-button" disabled>Backup 후 가져오기</button>
+              </div>
+            </div>
+          </details>
         </div>
         <article class="paper integration-card">
-          <div><p class="eyebrow">Repository integration</p><h3>다른 저장소에서 전달하기</h3></div>
+          <div><p class="eyebrow">HTTP API integration</p><h3>다른 앱에서 작업 전달하기</h3></div>
           <div class="guide-block">
             <pre id="integrationGuide">Loading integration guide…</pre>
             <button id="copyGuideButton" class="secondary-button">Copy guide</button>

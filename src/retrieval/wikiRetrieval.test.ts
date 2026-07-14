@@ -63,6 +63,185 @@ test("exact source ids retrieve source and reverse-linked compiled pages", (t) =
   assert.match(result.context, /declares_exact_source/);
 });
 
+test("ingest balances current impact review with evidence when historical revisions dominate lexical matches", (t) => {
+  const root = makeWiki(t);
+  const submitted = path.join(root, "submitted", "DESIGN.md");
+  writePage(root, "submitted/DESIGN.md", [
+    "# Atlas Review Design",
+    "",
+    "Walnut selection invariants require explicit review commands and stable detail state.",
+    "The machine catalog and renderer evidence remain separate.",
+  ].join("\n"));
+  for (let index = 0; index < 10; index += 1) {
+    writePage(root, `wiki/sources/src_202601${String(index).padStart(2, "0")}_atlas_design_${index}.md`, page(
+      `src_202601${String(index).padStart(2, "0")}_atlas_design_${index}`,
+      "source",
+      `Atlas review design revision ${index}`,
+      "Walnut selection design history.",
+      [],
+      [],
+      { status: "accepted" },
+    ));
+  }
+  writePage(root, "wiki/projects/atlas-current.md", page(
+    "atlas-current",
+    "project",
+    "Atlas current review contract",
+    "Walnut selection invariants require explicit review commands and stable detail state.",
+    [],
+    [],
+    { status: "active" },
+  ));
+  writePage(root, "wiki/decisions/atlas-catalog-boundary.md", page(
+    "atlas-catalog-boundary",
+    "decision",
+    "Atlas catalog and renderer evidence boundary",
+    "The machine catalog and renderer evidence remain separate.",
+    [],
+    [],
+    { status: "current" },
+  ));
+  writePage(root, "wiki/projects/atlas-old.md", page(
+    "atlas-old",
+    "project",
+    "Atlas historical design contract",
+    "Walnut selection invariants and machine catalog.",
+    [],
+    [],
+    { status: "historical" },
+  ));
+  writePage(root, "wiki/maps/atlas-map.md", page(
+    "atlas-map",
+    "map",
+    "Atlas review map",
+    "[[atlas-current]] [[atlas-catalog-boundary]]",
+  ));
+
+  const result = new WikiRetriever(root, { maxCandidates: 6 }).build(makeJob("ingest", submitted));
+  const manifest = parseManifest(result.context);
+  const candidates = manifest.candidates as Array<{
+    path: string;
+    role: string;
+    lifecycle: string;
+    purposes: string[];
+    reasons: string[];
+  }>;
+
+  assert.equal(manifest.inputSignal.mode, "submitted_markdown");
+  assert.equal(manifest.inputSignal.fileName, "DESIGN.md");
+  assert.equal(candidates.length, 6);
+  assert.equal(candidates.some((candidate) => candidate.path === "wiki/projects/atlas-current.md" &&
+    candidate.purposes.includes("impact_review")), true);
+  assert.equal(candidates.some((candidate) => candidate.path === "wiki/decisions/atlas-catalog-boundary.md" &&
+    candidate.purposes.includes("impact_review")), true);
+  assert.equal(candidates.filter((candidate) => candidate.role === "evidence").length <= 2, true);
+  assert.equal(candidates.some((candidate) => candidate.lifecycle === "historical" &&
+    candidate.purposes.includes("impact_review")), false);
+  assert.equal(candidates.some((candidate) => candidate.reasons.includes("submitted_source_term")), true);
+  assert.match(result.context, /approximately 12,000 characters/);
+  assert.match(result.context, /impact_review candidates only as pages to review/);
+  assert.equal(result.event.candidatePages, 6);
+});
+
+test("ingest keeps exact source evidence and its typed compiled impact relation", (t) => {
+  const root = makeWiki(t);
+  const sourceId = "src_20260714_typed_relation_a1b2c3d4";
+  writePage(root, `wiki/sources/${sourceId}.md`, page(sourceId, "source", "Typed relation source"));
+  writePage(root, "wiki/projects/typed-project.md", page(
+    "typed-project", "project", "Typed relation project", "", [], [sourceId], { status: "active" },
+  ));
+
+  const result = new WikiRetriever(root, { maxCandidates: 4 })
+    .build(makeJob("ingest", `reconcile ${sourceId}`));
+  const candidates = parseManifest(result.context).candidates as Array<{
+    path: string;
+    purposes: string[];
+    reasons: string[];
+  }>;
+
+  assert.equal(candidates.some((candidate) => candidate.path === `wiki/sources/${sourceId}.md` &&
+    candidate.purposes.includes("evidence")), true);
+  assert.equal(candidates.some((candidate) => candidate.path === "wiki/projects/typed-project.md" &&
+    candidate.purposes.includes("impact_review") &&
+    candidate.reasons.includes("compiled_from_source")), true);
+});
+
+test("ingest reserves current authority, source evidence, and a related map under source flooding", (t) => {
+  const root = makeWiki(t);
+  const submitted = path.join(root, "submitted", "FRONTEND.md");
+  const linkedSourceId = "src_2026019_atlas";
+  writePage(root, "submitted/FRONTEND.md", [
+    "# Atlas Renderer Guidance",
+    "",
+    "Stable renderer state and bounded catalog migration.",
+  ].join("\n"));
+  for (let index = 0; index < 20; index += 1) {
+    writePage(root, `wiki/sources/src_20260${String(index).padStart(2, "0")}_atlas.md`, page(
+      `src_20260${String(index).padStart(2, "0")}_atlas`,
+      "source",
+      `Atlas renderer source ${index}`,
+      "Stable renderer state and bounded catalog migration.",
+    ));
+  }
+  writePage(root, "wiki/projects/atlas-current.md", page(
+    "atlas-current",
+    "project",
+    "Atlas current renderer authority",
+    "Stable renderer state.",
+    [],
+    [linkedSourceId],
+    { status: "current" },
+  ));
+  writePage(root, "wiki/maps/renderer-routing.md", page(
+    "renderer-routing",
+    "map",
+    "Renderer routing",
+    "[[atlas-current]]",
+  ));
+
+  const result = new WikiRetriever(root, { maxCandidates: 3 }).build(makeJob("ingest", submitted));
+  const manifest = parseManifest(result.context);
+  const candidates = manifest.candidates as Array<{
+    path: string;
+    purposes: string[];
+    selectionReason: string;
+  }>;
+
+  assert.deepEqual(candidates.map((candidate) => candidate.selectionReason), [
+    "current_authority",
+    "source_evidence",
+    "related_map",
+  ]);
+  assert.equal(candidates.some((candidate) => candidate.path === "wiki/projects/atlas-current.md"), true);
+  assert.equal(candidates.some((candidate) =>
+    candidate.path === `wiki/sources/${linkedSourceId}.md`), true);
+  assert.equal(candidates.some((candidate) => candidate.path === "wiki/maps/renderer-routing.md"), true);
+  assert.equal(candidates.every((candidate) => candidate.purposes.length > 0), true);
+  assert.equal(manifest.selectionSummary.excluded.total >= 19, true);
+  assert.equal(manifest.selectionSummary.excluded.samples.length <= 6, true);
+  assert.equal(result.event.candidateSelection?.slots.current_authority, 1);
+  assert.match(result.context, /never concatenate multiple document bodies/);
+  assert.match(result.context, /verify it once with a targeted match or bounded tail/);
+  assert.equal(result.event.manifestCharacters < 20_000, true);
+});
+
+test("submitted Markdown inspection and the resulting manifest stay bounded", (t) => {
+  const root = makeWiki(t);
+  const submitted = path.join(root, "submitted", "LARGE.md");
+  writePage(root, "submitted/LARGE.md", `# Large source\n\n${"bounded signal ".repeat(20_000)}`);
+  writePage(root, "wiki/projects/bounded.md", page(
+    "bounded", "project", "Bounded signal project", "bounded signal", [], [], { status: "active" },
+  ));
+
+  const result = new WikiRetriever(root).build(makeJob("ingest", submitted));
+  const manifest = parseManifest(result.context);
+
+  assert.equal(manifest.inputSignal.mode, "submitted_markdown");
+  assert.equal(manifest.inputSignal.truncated, true);
+  assert.equal(manifest.inputSignal.charactersRead <= 64 * 1024, true);
+  assert.equal(result.event.manifestCharacters < 20_000, true);
+});
+
 test("lint alone reports pages over 20,000 characters and full audit partitions", (t) => {
   const root = makeWiki(t);
   writePage(root, "wiki/projects/large.md", page(
@@ -122,6 +301,7 @@ function page(
   body = "",
   aliases: string[] = [],
   sources: string[] = [],
+  metadata: Record<string, string> = {},
 ) {
   return [
     "---",
@@ -130,6 +310,7 @@ function page(
     `title: ${JSON.stringify(title)}`,
     ...(aliases.length ? [`aliases: ${JSON.stringify(aliases)}`] : []),
     ...(sources.length ? [`sources: ${JSON.stringify(sources)}`] : []),
+    ...Object.entries(metadata).map(([key, value]) => `${key}: ${value}`),
     "---",
     "",
     `# ${title}`,
@@ -137,6 +318,12 @@ function page(
     body,
     "",
   ].join("\n");
+}
+
+function parseManifest(context: string) {
+  const line = context.split("\n").find((value) => value.startsWith('{"version"'));
+  assert.ok(line, "retrieval manifest JSON line");
+  return JSON.parse(line) as Record<string, any>;
 }
 
 function makeJob(command: Job["command"], content: string): Job {

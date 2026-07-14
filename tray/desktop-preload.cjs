@@ -14,6 +14,10 @@ contextBridge.exposeInMainWorld("wikiDesktop", {
   getAutoLaunch: () => ipcRenderer.invoke("desktop:get-auto-launch"),
   setAutoLaunch: (enabled) => ipcRenderer.invoke("desktop:set-auto-launch", enabled),
   workspace: () => ipcRenderer.invoke("desktop:workspace"),
+  prepareGitImport: (remoteUrl) => ipcRenderer.invoke("desktop:git-prepare-import", remoteUrl),
+  applyGitImport: (id) => ipcRenderer.invoke("desktop:git-apply-import", id),
+  checkGitPull: () => ipcRenderer.invoke("desktop:git-check-pull"),
+  pullGitFastForward: () => ipcRenderer.invoke("desktop:git-pull"),
   openObsidian: () => ipcRenderer.invoke("desktop:open-obsidian"),
   onNavigate: (listener) => ipcRenderer.on("desktop:navigate", (_event, view) => listener(view)),
 });

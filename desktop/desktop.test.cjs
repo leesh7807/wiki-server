@@ -6,6 +6,7 @@ const test = require("node:test");
 const html = readFileSync(path.join(__dirname, "index.html"), "utf8");
 const css = readFileSync(path.join(__dirname, "styles.css"), "utf8");
 const app = readFileSync(path.join(__dirname, "app.js"), "utf8");
+const trayMain = readFileSync(path.join(__dirname, "..", "tray", "main.cjs"), "utf8");
 const packageConfig = JSON.parse(
   readFileSync(path.join(__dirname, "..", "package.json"), "utf8"),
 );
@@ -37,6 +38,44 @@ test("wiki view exposes operational paths, Git state, and Obsidian integration",
   }
   assert.match(app, /api\.workspace\(\)/);
   assert.match(app, /api\.openObsidian\(\)/);
+});
+
+test("wiki view exposes staged Git remote import and guarded fast-forward pull", () => {
+  for (const id of [
+    "gitRemoteUrl",
+    "validateImportButton",
+    "importTrustWarning",
+    "importBackupPath",
+    "importChanges",
+    "importConfirmation",
+    "applyImportButton",
+    "gitOrigin",
+    "gitSyncState",
+    "checkPullButton",
+    "pullButton",
+  ]) {
+    assert.match(html, new RegExp(`id="${id}"`));
+  }
+  assert.match(app, /api\.prepareGitImport/);
+  assert.match(app, /api\.applyGitImport/);
+  assert.match(app, /state\.pullState\?\.clean && state\.pullState\?\.canPull/);
+  assert.match(app, /api\.pullGitFastForward/);
+  assert.match(app, /userErrorMessage\(error\)/);
+  assert.match(app, /Error invoking remote method/);
+  assert.match(app, /운영 위키 필수 구조를 확인할 수 없습니다/);
+  assert.match(trayMain, /withWikiServerStopped\(\(\) => gitRemote\.applyImport/);
+  assert.match(trayMain, /withWikiServerStopped\(\(\) => gitRemote\.fastForwardPull/);
+  assert.match(trayMain, /Another Git remote operation is already running/);
+  assert.match(trayMain, /queued \|\| running/);
+});
+
+test("wiki Git controls use clear hierarchy and left-aligned operation feedback", () => {
+  assert.match(html, /<details class="paper info-card wide-card git-import-card">/);
+  assert.match(html, /HTTP API integration/);
+  assert.match(css, /grid-template-columns:\s*repeat\(3, 1fr\)/);
+  assert.match(css, /\.setting-message\.left-message\s*{\s*text-align:\s*left/);
+  assert.match(css, /\.sync-pull-button\.ready/);
+  assert.match(app, /checkButton\.disabled = !remote\.available \|\| !remote\.origin/);
 });
 
 test("desktop settings expose background launch at Windows login", () => {

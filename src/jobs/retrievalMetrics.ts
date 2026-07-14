@@ -1,3 +1,4 @@
+import path from "node:path";
 import type {
   JobCommand,
   JobRetrievalCoverage,
@@ -43,6 +44,11 @@ export function applyRetrievalObservability(
   for (const command of commands) {
     const search = isSearchCommand(command);
     const open = isOpenCommand(command);
+    const excludedPaths = excludedPathsInCommand(command);
+    const knownReadPaths = knownObservedReadPaths(next);
+    if (open && knownReadPaths.some((candidate) => commandIncludesPath(command, candidate))) {
+      next.repeatedReadCommandCount += 1;
+    }
     if (search) {
       next.searchCommandCount += 1;
       if (isBroadRootSearch(command)) next.broadRootSearchCount += 1;
@@ -50,6 +56,15 @@ export function applyRetrievalObservability(
       if (outputCharacters > (next.largestSearchOutputCharacters ?? 0)) {
         next.largestSearchOutputCharacters = outputCharacters;
       }
+    }
+    if (search && excludedPaths.length > 0) next.excludedPathSearchCount += 1;
+    if (isBroadExcludedPathAccess(command, excludedPaths, open, search)) {
+      next.broadExcludedPathAccessCount += 1;
+    } else if (isTargetedProvenanceAccess(excludedPaths, open || search)) {
+      next.targetedProvenanceReadCount += 1;
+    }
+    if ((open || search) && excludedPaths.some(isLogPath)) {
+      next.runtimeLogVerificationCount += 1;
     }
 
     if (next.mode === "candidates") {
@@ -62,7 +77,7 @@ export function applyRetrievalObservability(
       observeLintRouting(next, command, open || search);
     }
     if (open || search) {
-      for (const excludedPath of excludedPathsInCommand(command)) {
+      for (const excludedPath of excludedPaths) {
         addPath(next, "excludedPathAccesses", excludedPath);
       }
     }
@@ -96,6 +111,11 @@ export function normalizeRetrievalObservability(value: unknown) {
     evidence: "best_effort_agent_events",
     searchCommandCount: nonNegativeInteger(value.searchCommandCount),
     broadRootSearchCount: nonNegativeInteger(value.broadRootSearchCount),
+    excludedPathSearchCount: nonNegativeInteger(value.excludedPathSearchCount),
+    broadExcludedPathAccessCount: nonNegativeInteger(value.broadExcludedPathAccessCount),
+    targetedProvenanceReadCount: nonNegativeInteger(value.targetedProvenanceReadCount),
+    runtimeLogVerificationCount: nonNegativeInteger(value.runtimeLogVerificationCount),
+    repeatedReadCommandCount: nonNegativeInteger(value.repeatedReadCommandCount),
   };
   copyPaths(value, normalized, "candidatePaths");
   copyPaths(value, normalized, "openedCandidatePaths");
@@ -124,6 +144,11 @@ function fromRoutingEvent(event: RoutingEvent): JobRetrievalObservability {
     evidence: "best_effort_agent_events",
     searchCommandCount: 0,
     broadRootSearchCount: 0,
+    excludedPathSearchCount: 0,
+    broadExcludedPathAccessCount: 0,
+    targetedProvenanceReadCount: 0,
+    runtimeLogVerificationCount: 0,
+    repeatedReadCommandCount: 0,
   };
   if (event.routing.mode === "candidates") {
     base.candidatePaths = normalizePaths(event.routing.candidatePaths);
@@ -210,18 +235,21 @@ function refreshDerivedFields(value: JobRetrievalObservability) {
   }
   const signals: JobRetrievalObservability["policySignals"] = [];
   if (value.broadRootSearchCount > 0) signals.push("broad_root_search");
-  if ((value.excludedPathAccesses?.length ?? 0) > 0) signals.push("excluded_path_access");
+  if (value.broadExcludedPathAccessCount > 0) signals.push("excluded_path_access");
   if (signals.length > 0) value.policySignals = signals;
   else delete value.policySignals;
 }
 
 function coverage(offered: string[], opened: string[], searched: string[]): JobRetrievalCoverage {
   const touched = new Set([...opened, ...searched]);
+  const used = offered.filter((value) => touched.has(value)).length;
   return {
     offered: offered.length,
     opened: opened.length,
     searched: searched.length,
-    untouched: offered.filter((value) => !touched.has(value)).length,
+    used,
+    untouched: offered.length - used,
+    useRatio: offered.length > 0 ? used / offered.length : null,
   };
 }
 
@@ -290,6 +318,54 @@ function excludedPathsInCommand(command: string) {
     paths.push(candidate);
   }
   return normalizePaths(paths);
+}
+
+function knownObservedReadPaths(value: JobRetrievalObservability) {
+  return normalizePaths([
+    ...(value.openedCandidatePaths ?? []),
+    ...(value.otherObservedReadPaths ?? []),
+    ...(value.excludedPathAccesses ?? []),
+  ]);
+}
+
+function isBroadExcludedPathAccess(
+  command: string,
+  excludedPaths: string[],
+  open: boolean,
+  search: boolean,
+) {
+  if ((!open && !search) || excludedPaths.length === 0) return false;
+  const normalized = command.replaceAll("\\", "/");
+  if (/[*?]/.test(normalized)) return true;
+  if (/\bGet-ChildItem\b[^\r\n]*\b-Recurse\b/i.test(normalized)) return true;
+  if (excludedPaths.some(isExcludedDirectoryPath)) return true;
+  if (open && excludedPaths.some(isLogPath) &&
+      !/(?:-Tail|-TotalCount|-First)\b|\bSelect-Object\b[^\r\n]*-First\b/i.test(normalized)) {
+    return true;
+  }
+  return false;
+}
+
+function isTargetedProvenanceAccess(excludedPaths: string[], isRead: boolean) {
+  return isRead && excludedPaths.some((candidate) => {
+    const normalized = normalizePath(candidate);
+    return (normalized.startsWith("raw/") || normalized.includes("/raw/")) &&
+      !isExcludedDirectoryPath(normalized) && !/[*?]/.test(normalized);
+  });
+}
+
+function isExcludedDirectoryPath(value: string) {
+  const normalized = normalizePath(value);
+  if (normalized === "raw" || normalized.endsWith("/raw") ||
+      normalized === "assets" || normalized.endsWith("/assets")) return true;
+  const inExcludedTree = normalized.startsWith("raw/") || normalized.includes("/raw/") ||
+    normalized.startsWith("assets/") || normalized.includes("/assets/");
+  return inExcludedTree && path.posix.extname(normalized) === "";
+}
+
+function isLogPath(value: string) {
+  const normalized = normalizePath(value);
+  return normalized === "log.md" || normalized.endsWith("/log.md");
 }
 
 function isWikiKnowledgePath(value: string) {

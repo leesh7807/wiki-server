@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, w
 import { appendFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
+import { gunzipSync, gzipSync } from "node:zlib";
 import type {
   Job,
   JobCommand,
@@ -36,6 +37,7 @@ import {
 export type JobStoreOptions = {
   jobsDir: string;
   heartbeatMs: number;
+  compressEventLogs?: boolean;
   retention?: Partial<JobRetentionPolicy>;
   startRunner: (
     job: Job,
@@ -62,6 +64,17 @@ const DEFAULT_RETENTION: JobRetentionPolicy = {
 };
 
 const RAW_EVENT_LOGS_DIR_NAME = "raw-events";
+const COMPRESSED_EVENT_DATA_THRESHOLD_BYTES = 4096;
+const COMPRESSED_EVENT_STORAGE_VERSION = 1;
+
+type CompressedEventStorageRecord = Omit<JobEvent, "data"> & {
+  _wikiServerStorage: {
+    version: 1;
+    encoding: "gzip-base64";
+    originalBytes: number;
+    data: string;
+  };
+};
 
 export class JobStore {
   private readonly jobs = new Map<string, Job>();
@@ -258,8 +271,11 @@ export class JobStore {
           if (!current || current.status !== "running") return;
           current.lastEventAt = new Date().toISOString();
           current.updatedAt = current.lastEventAt;
+          const metricsBefore = metricsFingerprint(current.metrics);
           applyAgentObservability(current, event);
-          this.persistJob(current);
+          if (metricsFingerprint(current.metrics) !== metricsBefore) {
+            this.persistJob(current);
+          }
           this.recordEvent(job.id, "agent_event", event);
         },
       });
@@ -318,6 +334,7 @@ export class JobStore {
     this.persistJob(job);
     this.recordEvent(job.id, "status", this.publicJob(job));
     this.recordEvent(job.id, "done", this.publicJob(job));
+    this.releaseTerminalEventsAfterPersist(job.id);
     this.schedulePrune();
   }
 
@@ -379,7 +396,7 @@ export class JobStore {
 
   private persistEvent(event: JobEvent) {
     const logPath = this.jobLogPath(event.jobId);
-    const line = `${JSON.stringify(event)}\n`;
+    const line = `${encodeStoredEventLine(event, this.options.compressEventLogs !== false)}\n`;
     this.enqueuePersist(() => appendFile(logPath, line, "utf8"));
   }
 
@@ -388,6 +405,16 @@ export class JobStore {
     this.persistQueue = run.catch(() => undefined);
     void run.catch((error) => {
       console.error("[wiki-server] failed to persist job store", error);
+    });
+  }
+
+  private releaseTerminalEventsAfterPersist(jobId: string) {
+    const persisted = this.persistQueue;
+    void persisted.then(() => {
+      const job = this.jobs.get(jobId);
+      if (job && isTerminalStatus(job.status)) {
+        this.events.delete(jobId);
+      }
     });
   }
 
@@ -457,7 +484,8 @@ export class JobStore {
     const events: JobEvent[] = [];
     for (const line of lines) {
       try {
-        const event = JSON.parse(line) as JobEvent;
+        const event = parseStoredEventLine(line);
+        if (!event) continue;
         events.push(normalizeJobEvent(event));
         this.nextSeq = Math.max(this.nextSeq, event.seq + 1);
       } catch {
@@ -647,6 +675,10 @@ function makeContentPreview(content: string) {
   return compact.length > 160 ? `${compact.slice(0, 157)}...` : compact;
 }
 
+function metricsFingerprint(metrics: JobMetrics | undefined) {
+  return metrics ? JSON.stringify(metrics) : "";
+}
+
 function isTerminalStatus(status: JobStatus) {
   return (
     status === "succeeded" ||
@@ -686,11 +718,16 @@ function mergeLegacyEventLog(source: string, target: string) {
   try {
     const targetContent = readFileSyncUtf8(target);
     const targetLines = targetContent.split(/\r?\n/).filter(Boolean);
-    const existing = new Set(targetLines);
+    const existingLines = new Set(targetLines);
+    const existingEvents = new Set(targetLines.map(storedEventIdentity).filter(Boolean));
     const missingLines = readFileSyncUtf8(source)
       .split(/\r?\n/)
       .filter(Boolean)
-      .filter((line) => !existing.has(line));
+      .filter((line) => {
+        if (existingLines.has(line)) return false;
+        const identity = storedEventIdentity(line);
+        return !identity || !existingEvents.has(identity);
+      });
     if (missingLines.length > 0) {
       const separator = targetContent.endsWith("\n") || targetContent.length === 0 ? "" : "\n";
       writeFileSync(target, `${targetContent}${separator}${missingLines.join("\n")}\n`, "utf8");
@@ -698,5 +735,67 @@ function mergeLegacyEventLog(source: string, target: string) {
     deleteIfExists(source);
   } catch (error) {
     console.error("[wiki-server] failed to merge legacy job event log", error);
+  }
+}
+
+function encodeStoredEventLine(event: JobEvent, compress: boolean) {
+  const plain = JSON.stringify(event);
+  if (!compress) return plain;
+  const serializedData = JSON.stringify(event.data);
+  if (!serializedData) return plain;
+  const originalBytes = Buffer.byteLength(serializedData, "utf8");
+  if (originalBytes < COMPRESSED_EVENT_DATA_THRESHOLD_BYTES) return plain;
+  try {
+    const compressed: CompressedEventStorageRecord = {
+      seq: event.seq,
+      at: event.at,
+      jobId: event.jobId,
+      event: event.event,
+      _wikiServerStorage: {
+        version: COMPRESSED_EVENT_STORAGE_VERSION,
+        encoding: "gzip-base64",
+        originalBytes,
+        data: gzipSync(Buffer.from(serializedData, "utf8")).toString("base64"),
+      },
+    };
+    const encoded = JSON.stringify(compressed);
+    return Buffer.byteLength(encoded, "utf8") < Buffer.byteLength(plain, "utf8") ? encoded : plain;
+  } catch {
+    return plain;
+  }
+}
+
+function parseStoredEventLine(line: string): JobEvent | undefined {
+  const parsed = JSON.parse(line) as JobEvent | CompressedEventStorageRecord;
+  if (!isCompressedEventStorageRecord(parsed)) return parsed as JobEvent;
+  const serializedData = gunzipSync(Buffer.from(parsed._wikiServerStorage.data, "base64"))
+    .toString("utf8");
+  if (Buffer.byteLength(serializedData, "utf8") !== parsed._wikiServerStorage.originalBytes) {
+    return undefined;
+  }
+  return {
+    seq: parsed.seq,
+    at: parsed.at,
+    jobId: parsed.jobId,
+    event: parsed.event,
+    data: JSON.parse(serializedData),
+  };
+}
+
+function isCompressedEventStorageRecord(
+  value: JobEvent | CompressedEventStorageRecord,
+): value is CompressedEventStorageRecord {
+  const storage = (value as Partial<CompressedEventStorageRecord>)._wikiServerStorage;
+  return storage?.version === COMPRESSED_EVENT_STORAGE_VERSION &&
+    storage.encoding === "gzip-base64" && typeof storage.originalBytes === "number" &&
+    typeof storage.data === "string";
+}
+
+function storedEventIdentity(line: string) {
+  try {
+    const event = parseStoredEventLine(line);
+    return event ? `${event.jobId}:${event.seq}` : undefined;
+  } catch {
+    return undefined;
   }
 }
