@@ -17,6 +17,12 @@ test("desktop renderer owns distinct work, activity, wiki, and settings views", 
   assert.doesNotMatch(html, /iframe|\/client/);
 });
 
+test("desktop metrics focus on active queue state instead of historical outcomes", () => {
+  assert.match(app, /counts\.queued/);
+  assert.match(app, /counts\.running/);
+  assert.doesNotMatch(app, /counts\.succeeded|counts\.failed/);
+});
+
 test("desktop renderer exposes port warnings and the copyable repository guide", () => {
   assert.match(html, /id="portWarning"/);
   assert.match(html, /id="integrationGuide"/);

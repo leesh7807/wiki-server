@@ -140,8 +140,8 @@ function renderCurrentRun() {
 
 function renderMetrics() {
   const counts = state.metrics?.counts || {};
-  const summary = [["queued", counts.queued || 0], ["running", counts.running || 0], ["succeeded", counts.succeeded || 0], ["failed", counts.failed || 0]];
-  document.getElementById("miniMetrics").replaceChildren(...summary.slice(0, 4).map(([label, value]) => metricNode("mini-metric", label, value)));
+  const summary = [["queued", counts.queued || 0], ["running", counts.running || 0]];
+  document.getElementById("miniMetrics").replaceChildren(...summary.map(([label, value]) => metricNode("mini-metric", label, value)));
   document.getElementById("metricCards").replaceChildren(...summary.map(([label, value]) => metricNode("metric-card", label, value)));
   const queued = state.metrics?.current?.queued || [];
   const list = document.getElementById("queueList");
