@@ -12,12 +12,9 @@ const lintBodySchema = z.union([
   }).strict(),
 ]);
 
-export function formatJobInput(command: JobCommand, content: string) {
-  if (command === "lint") {
-    return "/lint";
-  }
-
-  return `/${command} ${content}`;
+export function formatJobInput(command: JobCommand, content: string, context?: string) {
+  const input = command === "lint" ? "/lint" : `/${command} ${content}`;
+  return context ? `${input}\n\n${context}` : input;
 }
 
 export function parseCommandContent(command: JobCommand, body: unknown) {

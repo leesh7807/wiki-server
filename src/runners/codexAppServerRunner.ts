@@ -66,6 +66,7 @@ export type CodexAppServerRunnerOptions = {
   model?: string;
   reasoningEffort?: string;
   serviceTier?: string;
+  input?: string;
   onAgentEvent: (event: unknown) => void;
 };
 
@@ -135,7 +136,7 @@ export class CodexAppServerManager {
             input: [
               {
                 type: "text",
-                text: formatJobInput(job.command, job.content),
+                text: options.input ?? formatJobInput(job.command, job.content),
                 text_elements: [],
               },
             ],

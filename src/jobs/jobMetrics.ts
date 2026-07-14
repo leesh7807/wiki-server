@@ -1,5 +1,10 @@
 import path from "node:path";
 import type { Job, JobEvent, JobFileObservability, JobMetrics, JobTokenMetrics } from "./jobTypes.js";
+import {
+  applyRetrievalObservability,
+  cloneRetrievalObservability,
+  normalizeRetrievalObservability,
+} from "./retrievalMetrics.js";
 
 const MAX_OBSERVABILITY_DEPTH = 8;
 const MAX_OBSERVABILITY_NODES = 500;
@@ -67,6 +72,12 @@ export function applyAgentObservability(job: Job, event: unknown) {
   }
 
   const fileObservability = extractFileObservability(event);
+  metrics.retrievalObservability = applyRetrievalObservability(
+    metrics.retrievalObservability,
+    event,
+    fileObservability,
+  );
+  if (!metrics.retrievalObservability) delete metrics.retrievalObservability;
   if (
     fileObservability.readFilePaths.length > 0 ||
     fileObservability.writeFilePaths.length > 0 ||
@@ -144,6 +155,9 @@ export function normalizeJobMetrics(job: Partial<Pick<Job, "metrics" | "createdA
     );
   }
 
+  const retrievalObservability = normalizeRetrievalObservability(rawMetrics?.retrievalObservability);
+  if (retrievalObservability) metrics.retrievalObservability = retrievalObservability;
+
   return metrics;
 }
 
@@ -187,6 +201,7 @@ export function cloneJobMetrics(metrics: JobMetrics): JobMetrics {
     ...metrics,
     tokenUsageHighWater: metrics.tokenUsageHighWater ? { ...metrics.tokenUsageHighWater } : undefined,
     fileObservability: cloneFileObservability(metrics.fileObservability),
+    retrievalObservability: cloneRetrievalObservability(metrics.retrievalObservability),
   };
 }
 

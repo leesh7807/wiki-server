@@ -17,6 +17,13 @@ test("formats query and ingest with existing trailing content behavior", () => {
   assert.equal(formatJobInput("query", ""), "/query ");
 });
 
+test("appends retrieval context without changing the canonical command line", () => {
+  assert.equal(formatJobInput("query", "what changed?", "<context />"),
+    "/query what changed?\n\n<context />");
+  assert.equal(formatJobInput("lint", "ignored", "<context />"),
+    "/lint\n\n<context />");
+});
+
 test("parses lint request bodies with optional content", () => {
   assert.deepEqual(parseCommandContent("lint", undefined), { ok: true, content: "" });
   assert.deepEqual(parseCommandContent("lint", {}), { ok: true, content: "" });

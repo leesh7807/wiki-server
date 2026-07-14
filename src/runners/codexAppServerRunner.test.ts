@@ -355,6 +355,7 @@ test("thread/start includes configured model and reasoning effort", async () => 
       model: "gpt-5.5",
       reasoningEffort: "high",
       serviceTier: "priority",
+      input: "/query prepared input\n\n<retrieval />",
       onAgentEvent: () => undefined,
     });
 
@@ -381,7 +382,14 @@ test("thread/start includes configured model and reasoning effort", async () => 
       result: { thread: { id: "thread-1" } },
     }));
     await eventually(() => sent.length >= 2);
-    const turnStartRequest = JSON.parse(sent[1] ?? "{}") as { id: number };
+    const turnStartRequest = JSON.parse(sent[1] ?? "{}") as {
+      id: number;
+      params?: { input?: Array<{ text?: string }> };
+    };
+    assert.equal(
+      turnStartRequest.params?.input?.[0]?.text,
+      "/query prepared input\n\n<retrieval />",
+    );
     testManager.handleMessage(JSON.stringify({
       id: turnStartRequest.id,
       result: {},

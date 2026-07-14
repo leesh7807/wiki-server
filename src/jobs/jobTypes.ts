@@ -33,6 +33,42 @@ export type JobFileObservability = {
   ambiguousFilePaths?: string[];
 };
 
+export type JobRetrievalCoverage = {
+  offered: number;
+  opened: number;
+  searched: number;
+  untouched: number;
+};
+
+export type JobRetrievalPartitionCoverage = {
+  offered: number;
+  observed: number;
+  untouched: number;
+};
+
+export type JobRetrievalObservability = {
+  strategy: string;
+  command: JobCommand;
+  mode: "candidates" | "partitions";
+  /** Best-effort interpretation of completed agent tool events, not a definitive read ledger. */
+  evidence: "best_effort_agent_events";
+  candidatePaths?: string[];
+  openedCandidatePaths?: string[];
+  searchedCandidatePaths?: string[];
+  candidateCoverage?: JobRetrievalCoverage;
+  partitionScopes?: string[];
+  observedPartitionScopes?: string[];
+  partitionCoverage?: JobRetrievalPartitionCoverage;
+  maintenanceCandidatePaths?: string[];
+  observedMaintenanceCandidatePaths?: string[];
+  otherObservedReadPaths?: string[];
+  excludedPathAccesses?: string[];
+  searchCommandCount: number;
+  broadRootSearchCount: number;
+  largestSearchOutputCharacters?: number;
+  policySignals?: Array<"broad_root_search" | "excluded_path_access">;
+};
+
 export type JobMetrics = {
   queuedAheadCount: number;
   queueWaitMs?: number;
@@ -44,6 +80,7 @@ export type JobMetrics = {
    */
   tokenUsageHighWater?: JobTokenMetrics;
   fileObservability?: JobFileObservability;
+  retrievalObservability?: JobRetrievalObservability;
 };
 
 export type PublicJob = {

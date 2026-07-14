@@ -616,6 +616,38 @@ test("selects a model for each command on app-server and exec paths", async () =
   assert.deepEqual(execCodexHomes, [process.cwd(), process.cwd(), process.cwd()]);
 });
 
+test("reuses one prepared input for app-server and exec fallback", async () => {
+  const inputs: Array<string | undefined> = [];
+  const runner = new AgentRunner(baseOptions, {
+    appServer: fakeAppServer({
+      startJob: (_job, options) => {
+        inputs.push(options.input);
+        return {
+          done: Promise.resolve({ ok: false, error: { message: "pre-turn failure" } }),
+          cancel: () => undefined,
+          canFallbackAfterFailure: () => true,
+        };
+      },
+    }),
+    startExecJob: (_job, options) => {
+      inputs.push(options.input);
+      return completedProcess({ ok: true, result: {} });
+    },
+  });
+
+  const result = await runner.startJob(
+    makeJob("query"),
+    { onAgentEvent: () => undefined },
+    "/query test\n\n<retrieval />",
+  ).done;
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(inputs, [
+    "/query test\n\n<retrieval />",
+    "/query test\n\n<retrieval />",
+  ]);
+});
+
 function fakeAppServer(overrides: Partial<AppServerManagerLike>): AppServerManagerLike {
   return {
     startJob: () => completedAppProcess({ ok: true, result: { lastAgentMessage: "app-ok" } }),

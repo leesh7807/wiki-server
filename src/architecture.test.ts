@@ -9,6 +9,7 @@ const allowedDependencies: Record<string, Set<string>> = {
   config: new Set(["config", "jobs"]),
   http: new Set(["http", "jobs"]),
   jobs: new Set(["jobs"]),
+  retrieval: new Set(["jobs", "retrieval"]),
   runners: new Set(["jobs", "runners"]),
 };
 

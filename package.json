@@ -15,7 +15,7 @@
     "make-icon": "node tray/make-icon.cjs",
     "start": "node dist/src/server.js",
     "typecheck": "tsc --noEmit",
-    "test": "node --test tray/system/auto-launch.test.cjs tray/server/codex-command.test.cjs tray/server/port-selection.test.cjs tray/server/integration-guide.test.cjs tray/wiki-repository.test.cjs tray/wiki/wiki-installation.test.cjs tray/wiki/wiki-workspace.test.cjs desktop/desktop.test.cjs && tsx --test src/architecture.test.ts src/runners/agentRunner.test.ts src/runners/codexAppServerRunner.test.ts src/runners/codexAppServerProtocol.test.ts src/runners/codexExecRunner.test.ts src/runners/codexVersion.test.ts src/http/clientHtml.test.ts src/http/wikiHttpServer.test.ts src/jobs/jobCommand.test.ts src/config/wikiServerConfig.test.ts src/http/serverStartup.test.ts src/jobs/jobStore.test.ts",
+    "test": "node --test tray/system/auto-launch.test.cjs tray/server/codex-command.test.cjs tray/server/port-selection.test.cjs tray/server/integration-guide.test.cjs tray/wiki-repository.test.cjs tray/wiki/wiki-installation.test.cjs tray/wiki/wiki-workspace.test.cjs desktop/desktop.test.cjs && tsx --test src/architecture.test.ts src/retrieval/wikiRetrieval.test.ts src/runners/agentRunner.test.ts src/runners/codexAppServerRunner.test.ts src/runners/codexAppServerProtocol.test.ts src/runners/codexExecRunner.test.ts src/runners/codexVersion.test.ts src/http/clientHtml.test.ts src/http/wikiHttpServer.test.ts src/jobs/jobCommand.test.ts src/jobs/retrievalMetrics.test.ts src/config/wikiServerConfig.test.ts src/http/serverStartup.test.ts src/jobs/jobStore.test.ts",
     "test:integration": "tsx --test src/runners/codexAppServerRunner.integration.test.ts",
     "build": "tsc",
     "prepare:wiki-seed": "node tray/prepare-wiki-seed.cjs",

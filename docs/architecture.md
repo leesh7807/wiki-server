@@ -27,6 +27,8 @@ The standalone runtime uses domain-oriented modules under `src/`:
 - `config/` resolves environment, paths, and command profiles.
 - `jobs/` owns command framing, job state, persistence, observability metrics,
   and the shared job contract.
+- `retrieval/` derives bounded lexical and link-graph routing context from the
+  current Markdown wiki. It never owns durable knowledge or writes to the wiki.
 - `runners/` adapts Codex app-server and exec transports and owns fallback
   policy.
 - `http/` owns routes, SSE replay/live delivery, response shapes, and the
@@ -87,6 +89,28 @@ instead of retrying through a transport that uses the same incompatible binary.
 
 The public integration contract remains HTTP. The Codex app-server WebSocket is
 an internal runner channel, not the external client API.
+
+Before a queued job starts, the server derives one deterministic retrieval
+context from `index.md` and `wiki/**/*.md`. Query and ingest receive bounded
+lexical seeds plus at most two graph hops. Lint receives full-audit partitions,
+graph diagnostics, and durable pages over 20,000 characters. The same prepared
+input is reused if app-server falls back to exec. `log.md`, `raw/**`, and assets
+are excluded from normal indexing; an agent may escalate to one specific raw
+source only for explicit provenance work. `WIKI_GRAPH_RETRIEVAL=0` rolls back
+to the original prompt framing.
+
+The initial retrieval event carries the bounded candidate paths or lint
+partitions. Job metrics then derive `retrievalObservability` from completed
+agent tool events, distinguishing candidate opens from searches and recording
+partition coverage, broad-root searches, excluded-path access, and the largest
+search output. Raw events remain authoritative evidence; the derived layer is
+explicitly best-effort and may report unknown or incomplete access.
+
+The initial query/ingest defaults are six lexical seeds, twelve final
+candidates, at most two graph hops, and eighty distinct query terms. These are
+bounded engineering defaults, not trained relevance parameters. Tune them from
+observed candidate coverage, broad-search frequency, search-output size,
+latency, and answer quality rather than increasing context speculatively.
 
 The standalone server defaults to `127.0.0.1:55173`. The desktop shell probes
 that port before launch and selects a nearby free port on collision. Port

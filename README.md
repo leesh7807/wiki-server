@@ -46,6 +46,9 @@ Defaults:
   shared fallback; `WIKI_CODEX_QUERY_REASONING_EFFORT`,
   `WIKI_CODEX_INGEST_REASONING_EFFORT`, and
   `WIKI_CODEX_LINT_REASONING_EFFORT` override it per command
+- Retrieval: deterministic Markdown graph routing is enabled by default. It
+  excludes `log.md`, `raw/**`, and assets from normal search context; set
+  `WIKI_GRAPH_RETRIEVAL=0` to disable it
 
 Open the local client at `http://127.0.0.1:55173/client`.
 
@@ -87,6 +90,11 @@ copy that guide when the app reports a port fallback.
 
 `POST /query`, `/ingest`, and `/lint` return `202` with `jobId`, `status`, and
 `eventsUrl`. Read successful answers from `result.lastAgentMessage`.
+
+Job `metrics.retrievalObservability` summarizes best-effort retrieval use from
+raw agent events: candidate opens/searches, lint partition coverage, broad-root
+searches, excluded-path access, and the largest observed search output. It is
+mechanical observability rather than a definitive file-read or quality ledger.
 
 ## Validation
 

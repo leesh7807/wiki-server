@@ -13,6 +13,8 @@ import { JobStore } from "./jobs/jobStore.js";
 import { startHttpServer } from "./http/serverStartup.js";
 import { createWikiHttpServer } from "./http/wikiHttpServer.js";
 import type { PublicJob } from "./jobs/jobTypes.js";
+import { formatJobInput } from "./jobs/jobCommand.js";
+import { WikiRetriever } from "./retrieval/wikiRetrieval.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -40,6 +42,8 @@ const heartbeatMs = Number.isFinite(parsedHeartbeatMs) && parsedHeartbeatMs > 0
   : 60000;
 const jobsDir = paths.jobsDir;
 const httpLoggerEnabled = process.env.WIKI_SERVER_HTTP_LOG === "1";
+const graphRetrievalEnabled = process.env.WIKI_GRAPH_RETRIEVAL !== "0";
+const wikiRetriever = new WikiRetriever(wikiRoot);
 
 const agentRunner = new AgentRunner({
   mode: agentRunnerMode,
@@ -58,7 +62,25 @@ const agentRunner = new AgentRunner({
 const store = new JobStore({
   jobsDir,
   heartbeatMs,
-  startRunner: (job, hooks) => agentRunner.startJob(job, hooks),
+  startRunner: (job, hooks) => {
+    if (!graphRetrievalEnabled) return agentRunner.startJob(job, hooks);
+    try {
+      const retrieval = wikiRetriever.build(job);
+      hooks.onAgentEvent(retrieval.event);
+      return agentRunner.startJob(
+        job,
+        hooks,
+        formatJobInput(job.command, job.content, retrieval.context),
+      );
+    } catch (error) {
+      hooks.onAgentEvent({
+        type: "retrieval_context_failed",
+        strategy: "wiki-graph-v1",
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return agentRunner.startJob(job, hooks);
+    }
+  },
 });
 
 const app = createWikiHttpServer({
@@ -71,6 +93,10 @@ const app = createWikiHttpServer({
     dataDir: paths.dataDir,
     heartbeatMs,
     httpLoggerEnabled,
+    graphRetrieval: {
+      enabled: graphRetrievalEnabled,
+      strategy: "wiki-graph-v1",
+    },
     agentRunner: agentRunner.status(),
   }),
 });

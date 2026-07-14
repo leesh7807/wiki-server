@@ -11,6 +11,7 @@ export type CodexRunnerOptions = {
   codexHome: string;
   model?: string;
   reasoningEffort?: string;
+  input?: string;
   onAgentEvent: (event: unknown) => void;
 };
 
@@ -93,7 +94,7 @@ export function startCodexJob(
     };
   });
 
-  child.stdin.end(formatJobInput(job.command, job.content));
+  child.stdin.end(options.input ?? formatJobInput(job.command, job.content));
 
   const done = new Promise<RunnerResult>((resolve) => {
     child.on("close", (code, signal) => {

@@ -10,6 +10,7 @@ than copied or generalized.
 src/server.ts (composition root)
   -> config/
   -> http/ -> jobs/
+  -> retrieval/ -> jobs/
   -> runners/ -> jobs/
   -> jobs/
 
@@ -34,8 +35,9 @@ is to hide ownership.
 | Compatibility browser client | `src/http/clientHtml.ts` | `clientHtml.test.ts` |
 | Command body validation or agent prompt framing | `src/jobs/jobCommand.ts` | `jobCommand.test.ts` |
 | Queueing, cancellation, persistence, retention | `src/jobs/jobStore.ts` | `jobStore.test.ts` |
-| Token/file event interpretation and legacy metric normalization | `src/jobs/jobMetrics.ts` | observability cases in `jobStore.test.ts` |
+| Token/file/retrieval event interpretation and metric normalization | `src/jobs/jobMetrics.ts`, `src/jobs/retrievalMetrics.ts` | `jobStore.test.ts`, `retrievalMetrics.test.ts` |
 | Public job/event/result shape | `src/jobs/jobTypes.ts` | consumers in `http/` and `runners/` |
+| Wiki graph parsing, bounded candidates, lint partitions | `src/retrieval/wikiRetrieval.ts` | `wikiRetrieval.test.ts` |
 | App-server versus exec fallback policy | `src/runners/agentRunner.ts` | `agentRunner.test.ts` |
 | Codex app-server wire protocol and lifecycle | `src/runners/codexAppServerRunner.ts` | runner and protocol tests beside it |
 | `codex exec` process handling and isolated environment | `src/runners/codexExecRunner.ts` | `codexExecRunner.test.ts` and fallback cases in `agentRunner.test.ts` |

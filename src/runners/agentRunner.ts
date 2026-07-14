@@ -52,6 +52,7 @@ type ExecRunnerStarter = (
     codexHome: string;
     model?: string;
     reasoningEffort?: string;
+    input?: string;
     onAgentEvent: (event: unknown) => void;
   },
 ) => RunningProcess;
@@ -88,9 +89,9 @@ export class AgentRunner {
     this.warmupStatus = options.warmupEnabled ? { status: "idle" } : { status: "disabled" };
   }
 
-  startJob(job: Job, hooks: RunnerHooks): RunningProcess {
+  startJob(job: Job, hooks: RunnerHooks, preparedInput?: string): RunningProcess {
     if (this.options.mode === "exec") {
-      return this.trackProcess(this.startExecJob(job, hooks));
+      return this.trackProcess(this.startExecJob(job, hooks, preparedInput));
     }
 
     if (this.warmupStatus.status === "failed") {
@@ -106,12 +107,12 @@ export class AgentRunner {
       hooks.onAgentEvent(
         makeFallbackEvent(`app-server warmup failed: ${error ?? "unknown error"}`),
       );
-      return this.trackProcess(this.startExecJob(job, hooks));
+      return this.trackProcess(this.startExecJob(job, hooks, preparedInput));
     }
 
     if (this.warmupRetry) {
       hooks.onAgentEvent(makeFallbackEvent("app-server warmup retry is still running"));
-      return this.trackProcess(this.startExecJob(job, hooks));
+      return this.trackProcess(this.startExecJob(job, hooks, preparedInput));
     }
 
     let appProcess: ReturnType<CodexAppServerManager["startJob"]>;
@@ -125,6 +126,7 @@ export class AgentRunner {
         model: this.modelFor(job.command),
         reasoningEffort: this.reasoningEffortFor(job.command),
         serviceTier: this.options.appServerServiceTier,
+        input: preparedInput,
         onAgentEvent: hooks.onAgentEvent,
       });
     } catch (error) {
@@ -134,7 +136,7 @@ export class AgentRunner {
         return this.trackProcess(failedProcess(error));
       }
       hooks.onAgentEvent(makeFallbackEvent(error));
-      return this.trackProcess(this.startExecJob(job, hooks));
+      return this.trackProcess(this.startExecJob(job, hooks, preparedInput));
     }
 
     const trackedAppProcess = this.trackProcess(appProcess);
@@ -157,7 +159,7 @@ export class AgentRunner {
 
       hooks.onAgentEvent(makeFallbackEvent(result.error.message));
       this.markAppServerUnavailable(result.error.message);
-      fallbackProcess = this.trackProcess(this.startExecJob(job, hooks));
+      fallbackProcess = this.trackProcess(this.startExecJob(job, hooks, preparedInput));
       return fallbackProcess.done;
     })();
 
@@ -247,13 +249,14 @@ export class AgentRunner {
     this.appServer.stop();
   }
 
-  private startExecJob(job: Job, hooks: RunnerHooks) {
+  private startExecJob(job: Job, hooks: RunnerHooks, preparedInput?: string) {
     return this.startExecRunner(job, {
       codexBin: this.options.codexBin,
       wikiRoot: this.options.wikiRoot,
       codexHome: this.options.appServerCodexHome,
       model: this.modelFor(job.command),
       reasoningEffort: this.reasoningEffortFor(job.command),
+      input: preparedInput,
       onAgentEvent: hooks.onAgentEvent,
     });
   }
