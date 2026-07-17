@@ -48,8 +48,8 @@ sudo apt install ./Wiki-Server-<version>-amd64.deb
 그 외 Linux에서는 AppImage 사용. 이동하지 않을 위치에 둔 뒤 실행:
 
 ```sh
-chmod +x Wiki-Server-<version>-x64.AppImage
-./Wiki-Server-<version>-x64.AppImage
+chmod +x Wiki-Server-<version>-x86_64.AppImage
+./Wiki-Server-<version>-x86_64.AppImage
 ```
 
 최초 실행 시 최소 위키와 독립된 Git 이력 생성. 기존 위키는 덮어쓰지 않음.
