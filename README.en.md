@@ -48,8 +48,8 @@ sudo apt install ./Wiki-Server-<version>-amd64.deb
 Other Linux distributions can use the AppImage. Keep it in a stable location:
 
 ```sh
-chmod +x Wiki-Server-<version>-x64.AppImage
-./Wiki-Server-<version>-x64.AppImage
+chmod +x Wiki-Server-<version>-x86_64.AppImage
+./Wiki-Server-<version>-x86_64.AppImage
 ```
 
 The first launch creates a minimal wiki with independent Git history and never
