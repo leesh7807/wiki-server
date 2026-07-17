@@ -39,7 +39,9 @@ Dependencies flow from the composition root into domains, and from transport
 adapters toward the `jobs/` contract. The jobs domain never imports HTTP,
 Electron, or a concrete runner. The Electron side follows the same pattern:
 `tray/main.cjs` composes modules grouped under `tray/server/`, `tray/system/`,
-and `tray/wiki/`, while `desktop/` remains the replaceable renderer.
+and `tray/wiki/`, while `desktop/` remains the replaceable renderer. The system
+layer resolves Windows LocalAppData or Linux XDG data paths and owns platform
+login-start integration.
 
 See `docs/code-map.md` for the change-routing table and extraction criteria.
 
@@ -57,12 +59,13 @@ maintainability while preserving the public HTTP compatibility surface.
 
 ## Runtime Paths
 
-The package root is `%USERPROFILE%\projects\wiki-server`. A packaged desktop
-app passes `%LOCALAPPDATA%\Wiki Server\wiki-root` explicitly through
-`WIKI_ROOT`. The source repository contains only `wiki-template/`, which is a
-minimal new-user scaffold and never a content snapshot. Source-only development
-continues to use legacy sibling `%USERPROFILE%\projects\wiki` when no override
-is provided.
+The package root is `%USERPROFILE%\projects\wiki-server`. Packaged and managed
+source launchers pass the operational `wiki-root` explicitly through
+`WIKI_ROOT`: `%LOCALAPPDATA%\Wiki Server\wiki-root` on Windows or
+`${XDG_DATA_HOME:-~/.local/share}/wiki-server/wiki-root` on Linux. The source
+repository contains only `wiki-template/`, which is a minimal new-user scaffold
+and never a content snapshot. Direct development continues to use legacy sibling
+`%USERPROFILE%\projects\wiki` when no override is provided.
 
 `WIKI_ROOT` overrides both locations. The server validates that the root contains
 `AGENTS.md`, `index.md`, and `wiki/`.

@@ -27,22 +27,55 @@ Repository ownership and public API boundaries are defined in `AGENTS.md`.
 `docs/code-map.md` routes changes to their owning modules, and
 `docs/code-quality.md` records the verification rules.
 
-## Installed App
+## Install and Run
 
-Windows desktop app. Runs the local server from the system tray and opens its
-desktop interface.
+The installed package is the persistent runtime. Windows uses the `.exe`
+installer; Debian and Ubuntu use the `.deb` package. Enabling **Launch at
+login** starts the server and tray in the background on subsequent logins.
+Closing the window leaves them running; **Quit** in the tray stops the app.
 
-On first launch, the app initializes the wiki under
-`%LOCALAPPDATA%\Wiki Server\wiki-root`. Updates and uninstall preserve the wiki
-and runtime data. See `docs/desktop-app.md` for the data boundary and interface
-design.
+The AppImage is a portable alternative. Move it to a stable location before
+enabling login startup.
+
+Installers are not published through [GitHub Releases](https://github.com/leesh7807/wiki-server/releases)
+yet. Source launch before the first release requires Node.js 24, Git, and the
+Codex CLI.
+
+```console
+git clone https://github.com/leesh7807/wiki-server.git
+cd wiki-server
+npm ci
+npm run app
+```
+
+`npm run app` is a pre-release verification path rather than a system install.
+It initializes a minimal wiki with its own Git history under the platform
+user-data directory, then opens the desktop app. An existing wiki is never
+overwritten. Login startup works while the checkout and Node.js location stay
+in place.
+
+- Windows: `%LOCALAPPDATA%\Wiki Server`
+- Linux: `${XDG_DATA_HOME:-~/.local/share}/wiki-server`
+
+After the first release, Windows uses the `.exe` installer and Debian or Ubuntu
+uses the `.deb` package. The portable AppImage can be run directly:
+
+```sh
+chmod +x Wiki-Server-*.AppImage
+./Wiki-Server-*.AppImage
+```
+
+Version tags build the Windows installer, Linux package, and AppImage and attach
+them to a release. The
+wiki and runtime data stay outside the source or application directory. See
+`docs/desktop-app.md` for the data boundary.
 
 ## Development
 
-```powershell
-npm install
-npm run dev
-```
+Run only the server with `npm run dev`.
+
+Run the desktop app against sibling `../wiki` or an explicit `WIKI_ROOT` with
+`npm run tray`.
 
 Defaults:
 

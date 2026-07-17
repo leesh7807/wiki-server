@@ -47,7 +47,8 @@ is to hide ownership.
 | Tray-side Codex command selection | `tray/server/codex-command.cjs` | `codex-command.test.cjs` |
 | Process startup, signals, concrete wiring | `src/server.ts` | typecheck, build, focused boundary tests |
 | Electron server endpoint and port behavior | `tray/server/` | tests beside each module |
-| Login/startup integration | `tray/system/` | tests beside each module |
+| Managed source launch and user-data paths | `scripts/run-desktop.cjs`, `tray/system/data-paths.cjs` | `tray/wiki-repository.test.cjs`, `data-paths.test.cjs` |
+| Login/startup integration | `tray/system/auto-launch.cjs` | `auto-launch.test.cjs` |
 | Operational wiki and Obsidian integration | `tray/wiki/` | tests beside each module |
 | Generic Git remote import, backup swap, and guarded fast-forward pull | `tray/wiki/git-remote.cjs` | `git-remote.test.cjs` and desktop contract tests |
 | Window/tray lifecycle and IPC registration | `tray/main.cjs` | `desktop/desktop.test.cjs` plus tray tests |
