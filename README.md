@@ -28,47 +28,50 @@ HTTP 작업 수신, Codex 실행, 검색 과정·Git 상태·작업 이벤트를
 - 모듈별 변경 위치: `docs/code-map.md`
 - 검증 기준: `docs/code-quality.md`
 
-## 설치와 실행
+## 설치
 
-지속 실행 기준은 설치본. Windows는 `.exe` 설치 파일, Debian·Ubuntu 계열 Linux는
-`.deb` 패키지 사용. 설치 후 설정의 `로그인 시 자동 시작`을 켜면 다음 로그인부터
-창을 열지 않고 서버와 트레이 실행. 창을 닫아도 계속 동작하고 트레이의 `종료`로
-프로세스 종료.
+[최신 Release](https://github.com/leesh7807/wiki-server/releases/latest)에서 64비트 배포본과
+`SHA256SUMS.txt` 제공. 위키 작업 실행에는 시스템에서 Git과 Codex CLI를 사용할 수
+있어야 함. 설치본에는 Node.js가 필요하지 않음.
 
-AppImage는 설치하지 않고 실행하는 선택지. 자동 시작을 사용하려면 먼저 이동하지
-않을 위치에 둔 뒤 설정을 켜야 함.
+Windows:
 
-아직 [GitHub Releases](https://github.com/leesh7807/wiki-server/releases)에 설치 파일을
-배포하지 않은 상태. 배포 전 소스 실행에는 Node.js 24, Git, Codex CLI 필요.
+1. `Wiki-Server-<version>-x64.exe` 다운로드
+2. 설치 파일 실행 후 Wiki Server 시작
+
+Debian·Ubuntu 계열 Linux:
+
+```sh
+sudo apt install ./Wiki-Server-<version>-amd64.deb
+```
+
+그 외 Linux에서는 AppImage 사용. 이동하지 않을 위치에 둔 뒤 실행:
+
+```sh
+chmod +x Wiki-Server-<version>-x64.AppImage
+./Wiki-Server-<version>-x64.AppImage
+```
+
+최초 실행 시 최소 위키와 독립된 Git 이력 생성. 기존 위키는 덮어쓰지 않음.
+
+- Windows 데이터: `%LOCALAPPDATA%\Wiki Server`
+- Linux 데이터: `${XDG_DATA_HOME:-~/.local/share}/wiki-server`
+- 설정의 `로그인 시 자동 시작`: 다음 로그인부터 서버와 트레이를 백그라운드에서 실행
+- 창 닫기: 트레이에서 계속 실행
+- 트레이의 `종료`: 서버와 앱 종료
+
+새 버전 설치와 앱 제거는 운영 위키와 런타임 데이터를 유지. AppImage 자동 시작은
+설정 시점의 원본 파일 경로를 사용하므로 파일을 옮긴 경우 다시 설정해야 함. 세부
+데이터 경계는 `docs/desktop-app.md` 참고.
+
+## 개발
+
+의존성 설치 후 관리형 데이터 경로로 데스크톱 앱 실행:
 
 ```console
-git clone https://github.com/leesh7807/wiki-server.git
-cd wiki-server
 npm ci
 npm run app
 ```
-
-`npm run app`은 설치가 아니라 배포 전 확인 경로. OS별 사용자 데이터 위치에 최소
-위키와 독립된 Git 이력을 만들고 데스크톱 앱 실행. 기존 위키가 있으면 덮어쓰지 않음.
-로그인 자동 시작도 동작하지만 저장소와 Node.js 위치가 그대로 유지되어야 함.
-
-- Windows: `%LOCALAPPDATA%\Wiki Server`
-- Linux: `${XDG_DATA_HOME:-~/.local/share}/wiki-server`
-
-첫 Release 이후 Windows는 `.exe`, Debian·Ubuntu 계열 Linux는 `.deb` 파일로 설치.
-AppImage는 실행 권한을 준 뒤 바로 실행:
-
-```sh
-chmod +x Wiki-Server-*.AppImage
-./Wiki-Server-*.AppImage
-```
-
-버전 태그가 Windows 설치 파일, Linux 설치 패키지와 AppImage를 빌드해 Release에
-연결하는 구조. 앱
-업데이트나 소스 디렉터리 제거와 무관하게 위키와 런타임 데이터 유지. 세부 데이터
-경계는 `docs/desktop-app.md` 참고.
-
-## 개발
 
 서버만 실행: `npm run dev`
 
