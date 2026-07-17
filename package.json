@@ -1,6 +1,6 @@
 {
   "name": "wiki-server",
-  "version": "0.3.3",
+  "version": "1.0.0",
   "description": "Local desktop agent server for an LLM-maintained wiki",
   "homepage": "https://github.com/leesh7807/wiki-server",
   "repository": {
@@ -34,9 +34,9 @@
     "build": "tsc",
     "prepare:wiki-seed": "node tray/prepare-wiki-seed.cjs",
     "app:pack": "npm run build && npm run prepare:wiki-seed && electron-builder --dir",
-    "app:dist": "npm run build && npm run prepare:wiki-seed && electron-builder",
-    "app:dist:win": "npm run build && npm run prepare:wiki-seed && electron-builder --win nsis",
-    "app:dist:linux": "npm run build && npm run prepare:wiki-seed && electron-builder --linux AppImage deb"
+    "app:dist": "npm run build && npm run prepare:wiki-seed && electron-builder --publish never",
+    "app:dist:win": "npm run build && npm run prepare:wiki-seed && electron-builder --win nsis --publish never",
+    "app:dist:linux": "npm run build && npm run prepare:wiki-seed && electron-builder --linux AppImage deb --publish never"
   },
   "dependencies": {
     "fastify": "^5.6.2",
