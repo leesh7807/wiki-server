@@ -2,8 +2,19 @@
   "name": "wiki-server",
   "version": "0.3.3",
   "description": "Local desktop agent server for an LLM-maintained wiki",
+  "homepage": "https://github.com/leesh7807/wiki-server",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/leesh7807/wiki-server.git"
+  },
+  "bugs": {
+    "url": "https://github.com/leesh7807/wiki-server/issues"
+  },
   "desktopName": "local.wiki-server.desktop",
-  "author": "Wiki Server Contributors",
+  "author": {
+    "name": "Wiki Server Contributors",
+    "email": "leesh7807@users.noreply.github.com"
+  },
   "license": "MIT",
   "private": true,
   "main": "tray/main.cjs",
@@ -42,6 +53,9 @@
     "appId": "local.wiki-server",
     "productName": "Wiki Server",
     "asar": true,
+    "toolsets": {
+      "appimage": "1.0.3"
+    },
     "artifactName": "Wiki-Server-${version}-${arch}.${ext}",
     "directories": {
       "output": "release"

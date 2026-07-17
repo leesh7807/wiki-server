@@ -9,6 +9,10 @@ const gitignore = readFileSync(path.join(packageRoot, ".gitignore"), "utf8");
 const main = readFileSync(path.join(__dirname, "main.cjs"), "utf8");
 const installation = readFileSync(path.join(__dirname, "wiki", "wiki-installation.cjs"), "utf8");
 const sourceLauncher = readFileSync(path.join(packageRoot, "scripts", "run-desktop.cjs"), "utf8");
+const releaseWorkflow = readFileSync(
+  path.join(packageRoot, ".github", "workflows", "desktop-release.yml"),
+  "utf8",
+);
 
 test("server tracks only a minimal wiki template", () => {
   assert.doesNotMatch(gitignore, /^\/wiki-template\/$/m);
@@ -35,7 +39,20 @@ test("packaging supports Windows and Linux desktop artifacts", () => {
   assert.deepEqual(packageConfig.build.linux.target, ["AppImage", "deb"]);
   assert.equal(packageConfig.build.linux.icon, "tray/icon.png");
   assert.equal(packageConfig.build.linux.syncDesktopName, true);
+  assert.equal(packageConfig.build.toolsets.appimage, "1.0.3");
+  assert.equal(packageConfig.homepage, "https://github.com/leesh7807/wiki-server");
+  assert.match(packageConfig.author.email, /@users\.noreply\.github\.com$/);
   assert.equal(existsSync(path.join(packageRoot, "tray", "icon.png")), true);
+});
+
+test("tag releases publish installable artifacts with version and checksum guards", () => {
+  assert.match(releaseWorkflow, /test "\$GITHUB_REF_NAME" = "v\$\(node -p/);
+  assert.match(releaseWorkflow, /release\/\*\.exe/);
+  assert.match(releaseWorkflow, /release\/\*\.AppImage/);
+  assert.match(releaseWorkflow, /release\/\*\.deb/);
+  assert.match(releaseWorkflow, /sha256sum \* > SHA256SUMS\.txt/);
+  assert.match(releaseWorkflow, /GH_REPO: \$\{\{ github\.repository \}\}/);
+  assert.match(releaseWorkflow, /gh release create/);
 });
 
 test("source launcher initializes the same durable wiki boundary before opening Electron", () => {
