@@ -93,6 +93,81 @@ test("derives lint partition and maintenance candidate coverage", () => {
   assert.deepEqual(observed.policySignals, undefined);
 });
 
+test("distinguishes repeated graph exploration and selective reads from filesystem search", () => {
+  const job = makeJob("ingest");
+  applyAgentObservability(job, {
+    type: "retrieval_context",
+    strategy: "wiki-graph-v1",
+    command: "ingest",
+    routing: { mode: "candidates", candidatePaths: ["wiki/projects/atlas.md"] },
+  });
+  applyAgentObservability(job, completed(
+    'wiki-retrieval search "renderer relation" ingest',
+    "metadata-only candidates",
+  ));
+  applyAgentObservability(job, completed(
+    'wiki-retrieval read "wiki/projects/atlas.md" heading "Runtime"',
+    "selected section",
+  ));
+  applyAgentObservability(job, completed(
+    'wiki-retrieval read "wiki/projects/atlas.md" full',
+    "whole document",
+  ));
+
+  const observed = job.metrics?.retrievalObservability;
+  assert.equal(observed?.searchCommandCount, 1);
+  assert.equal(observed?.graphSearchCommandCount, 1);
+  assert.equal(observed?.filesystemSearchCommandCount, 0);
+  assert.equal(observed?.selectiveReadCommandCount, 2);
+  assert.equal(observed?.fullDocumentReadCommandCount, 1);
+  assert.deepEqual(observed?.openedCandidatePaths, ["wiki/projects/atlas.md"]);
+  assert.equal(observed?.repeatedReadCommandCount, 1);
+  assert.equal(observed?.broadRootSearchCount, 0);
+});
+
+test("counts app-server shell wrappers and nested graph command actions once", () => {
+  const job = makeJob("query");
+  applyAgentObservability(job, {
+    type: "retrieval_context",
+    strategy: "wiki-graph-v1",
+    command: "query",
+    routing: { mode: "candidates", candidatePaths: ["wiki/projects/atlas.md"] },
+  });
+  applyAgentObservability(job, {
+    type: "app_server_notification",
+    method: "item/completed",
+    params: {
+      item: {
+        type: "commandExecution",
+        command: '"C:\\Program Files\\PowerShell\\pwsh.exe" -Command \'wiki-retrieval search "Atlas"\'',
+        commandActions: [{ type: "unknown", command: 'wiki-retrieval search "Atlas"' }],
+        aggregatedOutput: "metadata",
+      },
+    },
+  });
+  applyAgentObservability(job, {
+    type: "app_server_notification",
+    method: "item/completed",
+    params: {
+      item: {
+        type: "commandExecution",
+        command: '"C:\\Program Files\\PowerShell\\pwsh.exe" -Command \'wiki-retrieval read "wiki/projects/atlas.md" heading "Runtime"\'',
+        commandActions: [{
+          type: "unknown",
+          command: 'wiki-retrieval read "wiki/projects/atlas.md" heading "Runtime"',
+        }],
+        aggregatedOutput: "selected section",
+      },
+    },
+  });
+
+  const observed = job.metrics?.retrievalObservability;
+  assert.equal(observed?.searchCommandCount, 1);
+  assert.equal(observed?.graphSearchCommandCount, 1);
+  assert.equal(observed?.selectiveReadCommandCount, 1);
+  assert.deepEqual(observed?.openedCandidatePaths, ["wiki/projects/atlas.md"]);
+});
+
 test("records targeted ingest provenance reads without treating them as excluded searches", () => {
   const job = makeJob("ingest");
   applyAgentObservability(job, {

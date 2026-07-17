@@ -8,6 +8,26 @@ content lives only under `%LOCALAPPDATA%\Wiki Server\wiki-root` by default and
 has its own Git history. The tracked `wiki-template/` contains only the minimal
 directory and operating structure for a new installation.
 
+## Why This Repository Is Public
+
+This repository is a public record of one personal knowledge-work system: the
+concepts behind it, the decisions that shaped it, and the implementation that
+resulted. It is not presented as a general-purpose wiki product or a promise of
+support. The workflow is intentionally close to how its author works and
+thinks, but the code and design may still be useful as a reference.
+
+The software and the knowledge it operates on have deliberately separate
+ownership and Git histories:
+
+| Surface | Intended visibility | Contents |
+| --- | --- | --- |
+| This `wiki-server` repository | Public | Server, desktop app, tests, design documents, and a minimal first-run template |
+| Operational wiki repository | Private | Personal notes, sources, decisions, and accumulated knowledge |
+| Runtime data | Local only | Job metadata, raw agent events, caches, and isolated Codex state |
+
+The service is local-only and unauthenticated. Keep it bound to the local
+machine unless authentication and network controls are added deliberately.
+
 Repository ownership, public integration, and security constraints are defined
 in `AGENTS.md`. Day-to-day module ownership and verification guidance is in
 `docs/code-quality.md`. Start code changes with `docs/code-map.md`, which routes
@@ -46,9 +66,11 @@ Defaults:
   shared fallback; `WIKI_CODEX_QUERY_REASONING_EFFORT`,
   `WIKI_CODEX_INGEST_REASONING_EFFORT`, and
   `WIKI_CODEX_LINT_REASONING_EFFORT` override it per command
-- Retrieval: deterministic Markdown graph routing is enabled by default. It
-  excludes `log.md`, `raw/**`, and assets from normal search context; set
-  `WIKI_GRAPH_RETRIEVAL=0` to disable it
+- Retrieval: deterministic Markdown graph routing is enabled by default. The
+  agent can repeat metadata-only searches with the internal `wiki-retrieval`
+  command, then explicitly read one heading, line range, or whole selected
+  document. `log.md`, `raw/**`, and assets stay outside normal search context;
+  set `WIKI_GRAPH_RETRIEVAL=0` to disable both initial and repeated retrieval
 - Event storage: large event payloads are compressed inside the existing
   `raw-events/<jobId>.jsonl` file and transparently restored by the API; set
   `WIKI_SERVER_COMPRESS_EVENT_LOGS=0` to keep new records fully plain JSON
@@ -94,10 +116,20 @@ copy that guide when the app reports a port fallback.
 `POST /query`, `/ingest`, and `/lint` return `202` with `jobId`, `status`, and
 `eventsUrl`. Read successful answers from `result.lastAgentMessage`.
 
+Graph exploration is not an additional public API contract. The server installs
+`wiki-retrieval` into the isolated agent environment and uses a token-protected
+loopback RPC only as an internal process boundary. Search results contain
+identity, metadata, revision relations, graph connections, document outlines,
+and factual match fields, but no document body. Content enters agent context
+only after an explicit `wiki-retrieval read` selection. General text files
+submitted to ingest are sampled by content rather than ranked from their path or
+extension alone.
+
 Job `metrics.retrievalObservability` summarizes best-effort retrieval use from
-agent events: candidate use ratio, lint partition coverage, broad-root and broad
-excluded-path access, targeted provenance/log checks, repeated reads, and the
-largest observed search output. `metrics.executionObservability` separately
+agent events: candidate use ratio, graph versus filesystem search counts,
+selective versus full-document reads, lint partition coverage, broad-root and
+broad excluded-path access, targeted provenance/log checks, repeated reads, and
+the largest observed search output. `metrics.executionObservability` separately
 records the 12,000-character output budget, violations, repeated completed
 commands, and token/context high-water values. These are mechanical signals,
 not a definitive file-read ledger, model-call count, or billing usage.

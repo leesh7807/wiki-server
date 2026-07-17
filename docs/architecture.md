@@ -57,11 +57,11 @@ maintainability while preserving the public HTTP compatibility surface.
 
 ## Runtime Paths
 
-The package root is `C:\Users\leesh\projects\wiki-server`. A packaged desktop
+The package root is `%USERPROFILE%\projects\wiki-server`. A packaged desktop
 app passes `%LOCALAPPDATA%\Wiki Server\wiki-root` explicitly through
 `WIKI_ROOT`. The source repository contains only `wiki-template/`, which is a
 minimal new-user scaffold and never a content snapshot. Source-only development
-continues to use legacy sibling `C:\Users\leesh\projects\wiki` when no override
+continues to use legacy sibling `%USERPROFILE%\projects\wiki` when no override
 is provided.
 
 `WIKI_ROOT` overrides both locations. The server validates that the root contains
@@ -90,21 +90,41 @@ instead of retrying through a transport that uses the same incompatible binary.
 The public integration contract remains HTTP. The Codex app-server WebSocket is
 an internal runner channel, not the external client API.
 
-Before a queued job starts, the server derives one deterministic retrieval
+Before a queued job starts, the server derives deterministic initial retrieval
 context from `index.md` and `wiki/**/*.md`. Query and ingest receive bounded
-lexical seeds plus at most two graph hops. Lint receives full-audit partitions,
-graph diagnostics, and durable pages over 20,000 characters. The same prepared
-input is reused if app-server falls back to exec. `log.md`, `raw/**`, and assets
+lexical seeds plus at most two graph hops. This is an initial batch bound, not a
+job-level exploration limit: the isolated agent environment receives an
+internal `wiki-retrieval` command and may search the same cached graph again
+with different terms, document or source identities, and relationship
+viewpoints. Lint receives full-audit partitions, graph diagnostics, and durable
+pages over 20,000 characters. The same prepared input and command availability
+are preserved if app-server falls back to exec. `log.md`, `raw/**`, and assets
 are excluded from normal indexing; an agent may escalate to one specific raw
-source only for explicit provenance work. `WIKI_GRAPH_RETRIEVAL=0` rolls back
-to the original prompt framing.
+source only for explicit provenance work. `WIKI_GRAPH_RETRIEVAL=0` disables the
+initial context and internal command.
+
+Graph search and document reading are separate operations. Search returns no
+body snippets: each candidate exposes identity, declared type/status,
+aliases/tags, source/current-source/supersedes relations, bounded local graph
+connections, distance, outline and size, and factual match fields. Ranking is
+routing data and does not decide authority, accepted evidence, required reads,
+update targets, or knowledge lifecycle actions. After reviewing candidates the
+agent can explicitly read a heading or line range; a whole document requires a
+separate explicit mode and is reserved for tasks that need multiple or all
+sections. Graph connection metadata supports traversal without reading
+intermediary bodies merely to discover the next edge. The command uses a token-protected loopback RPC as an
+internal runner transport, not as part of the public HTTP integration contract.
+Parsed graph data is reused until indexed path size or modification time
+changes.
 
 The initial retrieval event carries the bounded candidate paths or lint
-partitions. Ingest selection reserves current authority, source evidence, and a
-related map when each is available, then records bounded selection and exclusion
-reasons. Job metrics derive `retrievalObservability` from completed agent tool
-events, distinguishing candidate use, targeted provenance/log checks, repeated
-reads, broad-root searches, broad excluded-path access, and output size. The
+partitions. Ingest selection preserves a current-status signal, a source
+candidate, and a related map when each is available, then records bounded
+selection and exclusion reasons without declaring authority. Job metrics derive
+`retrievalObservability` from completed agent tool events, distinguishing
+candidate use, graph and filesystem searches, selective
+and full-document reads, targeted provenance/log checks, repeated reads,
+broad-root searches, broad excluded-path access, and output size. The
 derived layer is explicitly best-effort and may report unknown or incomplete
 access.
 
@@ -117,10 +137,10 @@ records and mixed logs remain readable. Set
 server versions cannot decode already-compressed storage records.
 
 The initial query/ingest defaults are six diversified lexical/role seeds,
-twelve final candidates, at most two graph hops, and eighty distinct query
-terms. Ingest command output has a 12,000-character observability budget;
-multi-path batches are limited to headings/frontmatter or bounded matches, and
-document bodies are reviewed one section at a time. These are bounded
+twelve final candidates, at most two graph hops per search, and eighty distinct
+query terms. Agents may issue further searches without an arbitrary attempt
+cap. Ingest command output has a 12,000-character observability budget and
+document bodies are reviewed one selected section at a time. These are bounded
 engineering defaults, not trained relevance parameters. Tune them from observed
 candidate use, broad-search frequency, output-budget violations, latency, and
 answer quality rather than increasing context speculatively.

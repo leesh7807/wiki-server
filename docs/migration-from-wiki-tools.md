@@ -2,8 +2,8 @@
 
 ## Goal
 
-Move server ownership from `C:\Users\leesh\projects\wiki\tools\wiki-server` to
-`C:\Users\leesh\projects\wiki-server`, and move the user's durable wiki to the
+Move server ownership from `%USERPROFILE%\projects\wiki\tools\wiki-server` to
+`%USERPROFILE%\projects\wiki-server`, and move the user's durable wiki to the
 installed app data directory without changing the client-facing HTTP contract.
 
 This is a two-phase migration: externalize the runtime first, then establish the

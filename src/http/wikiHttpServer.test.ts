@@ -71,6 +71,65 @@ test("rejects invalid command bodies and job identifiers at the transport edge",
   }
 });
 
+test("keeps synchronous graph search and selective reads behind the internal command boundary", async () => {
+  const searches: unknown[] = [];
+  const reads: unknown[] = [];
+  const app = createWikiHttpServer({
+    store: makeStore(),
+    health: () => ({ ok: true }),
+    retrieval: {
+      token: "internal-secret",
+      search: (input) => {
+        searches.push(input);
+        return { candidates: [], bodySnippetsIncluded: false };
+      },
+      read: (input) => {
+        reads.push(input);
+        return {
+          path: input.path,
+          title: "Selected",
+          selectedBy: "line_range",
+          startLine: 4,
+          endLine: 8,
+          totalLines: 20,
+          truncated: false,
+          content: "selected range",
+        };
+      },
+    },
+  });
+
+  try {
+    const hidden = await app.inject({
+      method: "POST",
+      url: "/_internal/retrieval/search",
+      payload: { query: "alpha" },
+    });
+    assert.equal(hidden.statusCode, 404);
+
+    const search = await app.inject({
+      method: "POST",
+      url: "/_internal/retrieval/search",
+      headers: { "x-wiki-retrieval-token": "internal-secret" },
+      payload: { query: "alpha", command: "ingest" },
+    });
+    assert.equal(search.statusCode, 200);
+    assert.deepEqual(searches, [{ query: "alpha", command: "ingest" }]);
+
+    const read = await app.inject({
+      method: "POST",
+      url: "/_internal/retrieval/read",
+      headers: { "x-wiki-retrieval-token": "internal-secret" },
+      payload: { path: "wiki/concepts/alpha.md", startLine: 4, endLine: 8 },
+    });
+    assert.equal(read.statusCode, 200);
+    assert.equal(read.json().content, "selected range");
+    assert.deepEqual(reads, [{ path: "wiki/concepts/alpha.md", startLine: 4, endLine: 8 }]);
+  } finally {
+    await app.close();
+  }
+});
+
 const JOB_ID = "00000000-0000-4000-8000-000000000001";
 
 function makeStore(options: {

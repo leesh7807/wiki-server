@@ -23,6 +23,7 @@ export type AgentRunnerOptions = {
   appServerReasoningEffort?: string;
   appServerReasoningEfforts?: Partial<Record<JobCommand, string>>;
   appServerServiceTier?: string;
+  toolPath?: string;
   warmupEnabled: boolean;
   warmupFailureFallbackMs?: number;
 };
@@ -52,6 +53,7 @@ type ExecRunnerStarter = (
     codexHome: string;
     model?: string;
     reasoningEffort?: string;
+    toolPath?: string;
     input?: string;
     onAgentEvent: (event: unknown) => void;
   },
@@ -126,6 +128,7 @@ export class AgentRunner {
         model: this.modelFor(job.command),
         reasoningEffort: this.reasoningEffortFor(job.command),
         serviceTier: this.options.appServerServiceTier,
+        toolPath: this.options.toolPath,
         input: preparedInput,
         onAgentEvent: hooks.onAgentEvent,
       });
@@ -217,6 +220,7 @@ export class AgentRunner {
       model: this.modelFor("query"),
       reasoningEffort: this.reasoningEffortFor("query"),
       serviceTier: this.options.appServerServiceTier,
+      toolPath: this.options.toolPath,
     });
 
     if (result.ok) {
@@ -256,6 +260,7 @@ export class AgentRunner {
       codexHome: this.options.appServerCodexHome,
       model: this.modelFor(job.command),
       reasoningEffort: this.reasoningEffortFor(job.command),
+      toolPath: this.options.toolPath,
       input: preparedInput,
       onAgentEvent: hooks.onAgentEvent,
     });

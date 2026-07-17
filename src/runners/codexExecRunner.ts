@@ -1,5 +1,6 @@
 import { spawn, spawnSync } from "node:child_process";
 import { StringDecoder } from "node:string_decoder";
+import path from "node:path";
 import { formatJobInput } from "../jobs/jobCommand.js";
 import type { Job, JobError, RunningProcess, RunnerResult } from "../jobs/jobTypes.js";
 
@@ -11,6 +12,7 @@ export type CodexRunnerOptions = {
   codexHome: string;
   model?: string;
   reasoningEffort?: string;
+  toolPath?: string;
   input?: string;
   onAgentEvent: (event: unknown) => void;
 };
@@ -40,7 +42,7 @@ export function startCodexJob(
 
   const child = spawn(options.codexBin, args, {
     cwd: options.wikiRoot,
-    env: makeCodexEnvironment(options.codexHome),
+    env: makeCodexEnvironment(options.codexHome, process.env, options.toolPath),
     stdio: ["pipe", "pipe", "pipe"],
     shell: process.platform === "win32" && !options.codexBin.toLowerCase().endsWith(".exe"),
   });
@@ -161,11 +163,19 @@ export function startCodexJob(
 export function makeCodexEnvironment(
   codexHome: string,
   baseEnvironment: NodeJS.ProcessEnv = process.env,
+  toolPath?: string,
 ): NodeJS.ProcessEnv {
-  return {
+  const environment: NodeJS.ProcessEnv = {
     ...baseEnvironment,
     CODEX_HOME: codexHome,
   };
+  if (toolPath) {
+    const pathKey = Object.keys(environment).find((key) => key.toLocaleLowerCase("en-US") === "path") ?? "PATH";
+    environment[pathKey] = environment[pathKey]
+      ? `${toolPath}${path.delimiter}${environment[pathKey]}`
+      : toolPath;
+  }
+  return environment;
 }
 
 function extractAgentMessage(event: unknown): string | undefined {

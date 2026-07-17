@@ -15,6 +15,16 @@ knowledge rather than runtime output.
   categories when the current structure is inadequate.
 - `/query` gathers scoped evidence. `/ingest` preserves and compiles supplied
   material. `/lint` is a full-wiki audit, never a scoped lint.
+- Use the provided `wiki-retrieval search` command to refine graph exploration
+  from different terms, identities, sources, or relations before falling back
+  to broad filesystem search. Search results are routing candidates, not
+  authority or update decisions.
+- Review candidate metadata first. Use `wiki-retrieval read` to select a needed
+  heading or line range; request a whole document only when its full context is
+  explicitly necessary. Keep `index.md` as the starting navigation surface.
+- Follow candidate connection metadata without reading intermediary bodies just
+  to discover the next edge. Do not request a whole document merely because it
+  is short; use it only when multiple or all sections are required.
 - If a command changes the wiki, close the coherent checkpoint with a Git
   commit before reporting completion.
 - Do not store server job logs, secrets, caches, or unrelated project files in

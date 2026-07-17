@@ -39,11 +39,14 @@ export function applyRetrievalObservability(
   if (!next || routingEvent) return next;
   if (!isCompletedCommandEvent(event)) return next;
 
-  const commands = extractCommandStrings(event);
+  const commands = collapseNestedGraphCommandRepresentations(extractCommandStrings(event));
   const readPaths = normalizePaths(fileDelta.readFilePaths);
   for (const command of commands) {
-    const search = isSearchCommand(command);
-    const open = isOpenCommand(command);
+    const graphSearch = isGraphSearchCommand(command);
+    const graphRead = isGraphReadCommand(command);
+    const filesystemSearch = isFilesystemSearchCommand(command);
+    const search = graphSearch || filesystemSearch;
+    const open = isOpenCommand(command) || graphRead;
     const excludedPaths = excludedPathsInCommand(command);
     const knownReadPaths = knownObservedReadPaths(next);
     if (open && knownReadPaths.some((candidate) => commandIncludesPath(command, candidate))) {
@@ -51,11 +54,17 @@ export function applyRetrievalObservability(
     }
     if (search) {
       next.searchCommandCount += 1;
+      if (graphSearch) next.graphSearchCommandCount += 1;
+      if (filesystemSearch) next.filesystemSearchCommandCount += 1;
       if (isBroadRootSearch(command)) next.broadRootSearchCount += 1;
       const outputCharacters = largestOutputString(event);
       if (outputCharacters > (next.largestSearchOutputCharacters ?? 0)) {
         next.largestSearchOutputCharacters = outputCharacters;
       }
+    }
+    if (graphRead) {
+      next.selectiveReadCommandCount += 1;
+      if (isGraphFullReadCommand(command)) next.fullDocumentReadCommandCount += 1;
     }
     if (search && excludedPaths.length > 0) next.excludedPathSearchCount += 1;
     if (isBroadExcludedPathAccess(command, excludedPaths, open, search)) {
@@ -110,6 +119,10 @@ export function normalizeRetrievalObservability(value: unknown) {
     mode,
     evidence: "best_effort_agent_events",
     searchCommandCount: nonNegativeInteger(value.searchCommandCount),
+    graphSearchCommandCount: nonNegativeInteger(value.graphSearchCommandCount),
+    filesystemSearchCommandCount: nonNegativeInteger(value.filesystemSearchCommandCount),
+    selectiveReadCommandCount: nonNegativeInteger(value.selectiveReadCommandCount),
+    fullDocumentReadCommandCount: nonNegativeInteger(value.fullDocumentReadCommandCount),
     broadRootSearchCount: nonNegativeInteger(value.broadRootSearchCount),
     excludedPathSearchCount: nonNegativeInteger(value.excludedPathSearchCount),
     broadExcludedPathAccessCount: nonNegativeInteger(value.broadExcludedPathAccessCount),
@@ -143,6 +156,10 @@ function fromRoutingEvent(event: RoutingEvent): JobRetrievalObservability {
     mode: event.routing.mode,
     evidence: "best_effort_agent_events",
     searchCommandCount: 0,
+    graphSearchCommandCount: 0,
+    filesystemSearchCommandCount: 0,
+    selectiveReadCommandCount: 0,
+    fullDocumentReadCommandCount: 0,
     broadRootSearchCount: 0,
     excludedPathSearchCount: 0,
     broadExcludedPathAccessCount: 0,
@@ -274,6 +291,14 @@ function extractCommandStrings(event: unknown) {
   return commands;
 }
 
+function collapseNestedGraphCommandRepresentations(commands: string[]) {
+  return commands.filter((command) => !commands.some((other) => {
+    if (other === command || other.length >= command.length || !command.includes(other)) return false;
+    return (isGraphSearchCommand(command) && isGraphSearchCommand(other)) ||
+      (isGraphReadCommand(command) && isGraphReadCommand(other));
+  }));
+}
+
 function largestOutputString(event: unknown) {
   let largest = 0;
   visit(event, (value, key) => {
@@ -283,9 +308,21 @@ function largestOutputString(event: unknown) {
   return largest;
 }
 
-function isSearchCommand(command: string) {
+function isFilesystemSearchCommand(command: string) {
   return /\b(rg|grep|findstr|Select-String)\b/i.test(command) || /\bgit\s+grep\b/i.test(command) ||
     /\bGet-ChildItem\b[^\r\n]*\b-Recurse\b/i.test(command);
+}
+
+function isGraphSearchCommand(command: string) {
+  return /(?:^|[\s"'])wiki-retrieval(?:\.cmd)?\s+search(?:\s|$)/i.test(command);
+}
+
+function isGraphReadCommand(command: string) {
+  return /(?:^|[\s"'])wiki-retrieval(?:\.cmd)?\s+read(?:\s|$)/i.test(command);
+}
+
+function isGraphFullReadCommand(command: string) {
+  return isGraphReadCommand(command) && /(?:^|\s)full(?:\s|$)/i.test(command);
 }
 
 function isOpenCommand(command: string) {
@@ -293,7 +330,7 @@ function isOpenCommand(command: string) {
 }
 
 function isBroadRootSearch(command: string) {
-  if (!isSearchCommand(command)) return false;
+  if (!isFilesystemSearchCommand(command)) return false;
   const normalized = command.replaceAll("\\", "/");
   if (/\b(rg|grep)\b[^\r\n]*(?:^|\s)\.(?:\s|$)/i.test(normalized)) return true;
   if (/\b(rg|grep)\b[^\r\n]*--hidden\b/i.test(normalized)) return true;

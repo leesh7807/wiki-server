@@ -91,7 +91,12 @@ export type JobRetrievalObservability = {
   targetedProvenanceReadCount: number;
   runtimeLogVerificationCount: number;
   repeatedReadCommandCount: number;
+  /** All observed search commands, including graph and filesystem search. */
   searchCommandCount: number;
+  graphSearchCommandCount: number;
+  filesystemSearchCommandCount: number;
+  selectiveReadCommandCount: number;
+  fullDocumentReadCommandCount: number;
   broadRootSearchCount: number;
   largestSearchOutputCharacters?: number;
   policySignals?: Array<"broad_root_search" | "excluded_path_access">;

@@ -10,7 +10,9 @@ test("uses bounded lexical seeds and two graph hops without scanning excluded da
   const root = makeWiki(t);
   writePage(root, "wiki/maps/km-map.md", page("km-map", "map", "Knowledge Manager map", "[[knowledge-manager]]"));
   writePage(root, "wiki/projects/knowledge-manager.md", page(
-    "knowledge-manager", "project", "Knowledge Manager", "[[proposal-authority]]", ["Trend Collector"],
+    "knowledge-manager", "project", "Knowledge Manager",
+    "[Proposal](../concepts/proposal-authority.md)\n\nPRIVATE_PARAGRAPH_MUST_NOT_ENTER_SEARCH_RESULTS",
+    ["Trend Collector"],
   ));
   writePage(root, "wiki/concepts/proposal-authority.md", page(
     "proposal-authority", "concept", "Proposal authority", "[[approval-decision]]",
@@ -31,7 +33,17 @@ test("uses bounded lexical seeds and two graph hops without scanning excluded da
   assert.match(result.context, /wiki\/projects\/knowledge-manager\.md/);
   assert.match(result.context, /wiki\/concepts\/proposal-authority\.md/);
   assert.match(result.context, /wiki\/decisions\/approval-decision\.md/);
-  assert.doesNotMatch(result.context, /third-hop-only\.md/);
+  const manifest = parseManifest(result.context);
+  const candidates = manifest.candidates as Array<any>;
+  assert.equal(candidates.some((candidate) =>
+    candidate.path === "wiki/concepts/third-hop-only.md"), false);
+  const proposal = candidates.find((candidate) => candidate.path === "wiki/concepts/proposal-authority.md");
+  assert.deepEqual(proposal.inclusionEvidence.graphConnections, [{
+    fromPath: "wiki/projects/knowledge-manager.md",
+    relation: "outgoing_link",
+    distance: 1,
+  }]);
+  assert.doesNotMatch(result.context, /PRIVATE_PARAGRAPH_MUST_NOT_ENTER_SEARCH_RESULTS/);
   assert.deepEqual(result.observability.scannedPaths, [
     "index.md",
     "wiki/concepts/proposal-authority.md",
@@ -117,7 +129,8 @@ test("ingest balances current impact review with evidence when historical revisi
     "[[atlas-current]] [[atlas-catalog-boundary]]",
   ));
 
-  const result = new WikiRetriever(root, { maxCandidates: 6 }).build(makeJob("ingest", submitted));
+  const result = new WikiRetriever(root, { maxCandidates: 6, retrievalCommand: "wiki-retrieval" })
+    .build(makeJob("ingest", submitted));
   const manifest = parseManifest(result.context);
   const candidates = manifest.candidates as Array<{
     path: string;
@@ -139,6 +152,8 @@ test("ingest balances current impact review with evidence when historical revisi
     candidate.purposes.includes("impact_review")), false);
   assert.equal(candidates.some((candidate) => candidate.reasons.includes("submitted_source_term")), true);
   assert.match(result.context, /approximately 12,000 characters/);
+  assert.match(result.context, /continue navigation without reading intermediary bodies/);
+  assert.match(result.context, /Do not use full merely because a document is short/);
   assert.match(result.context, /impact_review candidates only as pages to review/);
   assert.equal(result.event.candidatePages, 6);
 });
@@ -166,7 +181,7 @@ test("ingest keeps exact source evidence and its typed compiled impact relation"
     candidate.reasons.includes("compiled_from_source")), true);
 });
 
-test("ingest reserves current authority, source evidence, and a related map under source flooding", (t) => {
+test("ingest preserves current-status, source, and map signals without declaring authority", (t) => {
   const root = makeWiki(t);
   const submitted = path.join(root, "submitted", "FRONTEND.md");
   const linkedSourceId = "src_2026019_atlas";
@@ -208,8 +223,8 @@ test("ingest reserves current authority, source evidence, and a related map unde
   }>;
 
   assert.deepEqual(candidates.map((candidate) => candidate.selectionReason), [
-    "current_authority",
-    "source_evidence",
+    "current_status_signal",
+    "source_candidate",
     "related_map",
   ]);
   assert.equal(candidates.some((candidate) => candidate.path === "wiki/projects/atlas-current.md"), true);
@@ -219,7 +234,8 @@ test("ingest reserves current authority, source evidence, and a related map unde
   assert.equal(candidates.every((candidate) => candidate.purposes.length > 0), true);
   assert.equal(manifest.selectionSummary.excluded.total >= 19, true);
   assert.equal(manifest.selectionSummary.excluded.samples.length <= 6, true);
-  assert.equal(result.event.candidateSelection?.slots.current_authority, 1);
+  assert.equal(result.event.candidateSelection?.slots.current_status_signal, 1);
+  assert.doesNotMatch(result.context, /current_authority/);
   assert.match(result.context, /never concatenate multiple document bodies/);
   assert.match(result.context, /verify it once with a targeted match or bounded tail/);
   assert.equal(result.event.manifestCharacters < 20_000, true);
@@ -240,6 +256,134 @@ test("submitted Markdown inspection and the resulting manifest stay bounded", (t
   assert.equal(manifest.inputSignal.truncated, true);
   assert.equal(manifest.inputSignal.charactersRead <= 64 * 1024, true);
   assert.equal(result.event.manifestCharacters < 20_000, true);
+});
+
+test("uses content from general text sources, including a Source field", (t) => {
+  const root = makeWiki(t);
+  const submitted = path.join(root, "submitted", "opaque-input.txt");
+  writePage(root, "submitted/opaque-input.txt", [
+    "plain text source",
+    "Juniper handshake requires a durable envelope boundary.",
+  ].join("\n"));
+  writePage(root, "wiki/concepts/envelope.md", page(
+    "envelope", "concept", "Durable envelope", "Juniper handshake and envelope boundary.",
+  ));
+
+  const result = new WikiRetriever(root).build(makeJob("ingest", `Source: ${submitted}\nContext: reconcile it`));
+  const manifest = parseManifest(result.context);
+
+  assert.equal(manifest.inputSignal.mode, "submitted_text");
+  assert.equal(manifest.inputSignal.fileName, "opaque-input.txt");
+  assert.equal((manifest.candidates as Array<{ path: string }>).some((candidate) =>
+    candidate.path === "wiki/concepts/envelope.md"), true);
+  assert.doesNotMatch(result.context, /plain text source/);
+});
+
+test("returns identity, metadata, revision relations, structure, and factual matches without body text", (t) => {
+  const root = makeWiki(t);
+  const oldSource = "src_20260101_renderer_old";
+  const newSource = "src_20260201_renderer_new";
+  writePage(root, `wiki/sources/${oldSource}.md`, page(oldSource, "source", "Old renderer source"));
+  writePage(root, `wiki/sources/${newSource}.md`, page(
+    newSource,
+    "source",
+    "New renderer source",
+    "",
+    [],
+    [],
+    { supersedes: `[${oldSource}]`, status: "accepted" },
+  ));
+  writePage(root, "wiki/projects/renderer.md", [
+    "---",
+    "id: renderer-project",
+    "type: project",
+    "title: Renderer Project",
+    "status: current",
+    "aliases:",
+    "  - Prism Route",
+    "tags:",
+    "  - rendering",
+    `sources: [${oldSource}, ${newSource}]`,
+    `current_source: ${newSource}`,
+    "---",
+    "",
+    "# Renderer Project",
+    "",
+    "A PRIVATE_BODY_SENTENCE that must stay out of candidate metadata.",
+    "",
+    "```md",
+    "## Not a real heading",
+    "```",
+    "",
+    "## Runtime Contract",
+    "",
+    "Details.",
+  ].join("\n"));
+
+  const manifest = new WikiRetriever(root).search({ query: "Prism Route rendering" }) as any;
+  const candidate = manifest.candidates.find((value: any) => value.path === "wiki/projects/renderer.md");
+
+  assert.equal(candidate.id, "renderer-project");
+  assert.equal(candidate.status, "current");
+  assert.deepEqual(candidate.aliases, ["Prism Route"]);
+  assert.deepEqual(candidate.tags, ["rendering"]);
+  assert.equal(candidate.graphDistance, 0);
+  assert.equal(candidate.inclusionEvidence.matches.some((match: any) =>
+    match.term === "prism" && match.fields.includes("aliases")), true);
+  assert.equal(candidate.revisionRelations.currentSource, newSource);
+  assert.deepEqual(candidate.revisionRelations.sources, [oldSource, newSource]);
+  assert.equal(candidate.connections.some((connection: any) =>
+    connection.path.endsWith(`${newSource}.md`) && connection.relation === "current_source"), true);
+  assert.equal(candidate.structure.lines > 10, true);
+  assert.equal(candidate.structure.headings.some((heading: any) => heading.title === "Runtime Contract"), true);
+  assert.equal(candidate.structure.headings.some((heading: any) => heading.title === "Not a real heading"), false);
+  assert.equal(JSON.stringify(manifest).includes("PRIVATE_BODY_SENTENCE"), false);
+  assert.equal(manifest.decisionBoundary.authorityDeterminedByAgent, true);
+  assert.deepEqual(manifest.navigationSurfaces.map((surface: any) => surface.path), ["index.md"]);
+
+  const sourceManifest = new WikiRetriever(root).search({ query: newSource }) as any;
+  const sourceCandidate = sourceManifest.candidates.find((value: any) =>
+    value.path.endsWith(`${newSource}.md`));
+  assert.deepEqual(sourceCandidate.revisionRelations.supersedes, [oldSource]);
+  assert.deepEqual(sourceCandidate.revisionRelations.compiledPages, ["wiki/projects/renderer.md"]);
+  assert.deepEqual(sourceCandidate.revisionRelations.currentFor, ["wiki/projects/renderer.md"]);
+});
+
+test("supports repeated graph searches and explicit bounded document reads", (t) => {
+  const root = makeWiki(t);
+  writePage(root, "wiki/concepts/alpha.md", page(
+    "alpha", "concept", "Alpha routing", "## Needed Section\n\nchosen line\n\n## Other Section\n\nother line",
+  ));
+  writePage(root, "wiki/concepts/beta.md", page("beta", "concept", "Beta routing", "separate body"));
+  const retriever = new WikiRetriever(root);
+
+  for (let index = 0; index < 12; index += 1) {
+    const result = retriever.search({ query: index % 2 === 0 ? "alpha" : "beta" }) as any;
+    assert.equal(result.candidates.length > 0, true);
+    assert.equal(JSON.stringify(result).includes("chosen line"), false);
+    assert.equal(JSON.stringify(result).includes("separate body"), false);
+  }
+
+  writePage(root, "wiki/concepts/gamma.md", page("gamma", "concept", "Gamma routing", "new graph node"));
+  const refreshed = retriever.search({ query: "gamma" }) as any;
+  assert.equal(refreshed.candidates.some((candidate: any) => candidate.path.endsWith("gamma.md")), true);
+
+  const section = retriever.read({ path: "wiki/concepts/alpha.md", heading: "Needed Section" });
+  assert.match(section.content, /chosen line/);
+  assert.doesNotMatch(section.content, /other line/);
+  assert.equal(section.selectedBy, "heading");
+
+  const range = retriever.read({ path: "alpha", startLine: 1, endLine: 10_000 });
+  assert.equal(range.endLine - range.startLine + 1 <= 200, true);
+  assert.equal(range.truncated, true);
+  assert.throws(() => retriever.read({ path: "../outside.md", full: true }), /not part of the indexed wiki graph/);
+  const full = retriever.read({ path: "alpha", full: true });
+  assert.match(full.content, /other line/);
+  assert.equal(full.selectedBy, "full");
+
+  writePage(root, "wiki/projects/alpha-copy.md", page("alpha", "project", "Duplicate Alpha"));
+  assert.throws(() => retriever.read({ path: "alpha", full: true }), /identity is ambiguous/);
+  assert.match(retriever.read({ path: "wiki/concepts/alpha.md", full: true }).content, /chosen line/);
 });
 
 test("lint alone reports pages over 20,000 characters and full audit partitions", (t) => {

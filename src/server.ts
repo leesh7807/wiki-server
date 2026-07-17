@@ -1,4 +1,5 @@
 import path from "node:path";
+import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { AgentRunner, type AgentRunnerMode } from "./runners/agentRunner.js";
 import { resolveCodexVersion } from "./runners/codexVersion.js";
@@ -15,6 +16,7 @@ import { createWikiHttpServer } from "./http/wikiHttpServer.js";
 import type { PublicJob } from "./jobs/jobTypes.js";
 import { formatJobInput } from "./jobs/jobCommand.js";
 import { WikiRetriever } from "./retrieval/wikiRetrieval.js";
+import { installWikiRetrievalCommand } from "./retrieval/wikiRetrievalCommand.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -44,7 +46,17 @@ const jobsDir = paths.jobsDir;
 const httpLoggerEnabled = process.env.WIKI_SERVER_HTTP_LOG === "1";
 const graphRetrievalEnabled = process.env.WIKI_GRAPH_RETRIEVAL !== "0";
 const eventLogCompressionEnabled = process.env.WIKI_SERVER_COMPRESS_EVENT_LOGS !== "0";
-const wikiRetriever = new WikiRetriever(wikiRoot);
+const retrievalHost = host === "0.0.0.0" || host === "::"
+  ? "127.0.0.1"
+  : host.includes(":") ? `[${host}]` : host;
+const retrievalBaseUrl = `http://${retrievalHost}:${port}`;
+const retrievalToken = randomUUID();
+const retrievalToolDirectory = graphRetrievalEnabled
+  ? installWikiRetrievalCommand(paths.dataDir, retrievalBaseUrl, retrievalToken)
+  : undefined;
+const wikiRetriever = new WikiRetriever(wikiRoot, {
+  retrievalCommand: retrievalToolDirectory ? "wiki-retrieval" : undefined,
+});
 
 const agentRunner = new AgentRunner({
   mode: agentRunnerMode,
@@ -58,6 +70,7 @@ const agentRunner = new AgentRunner({
   appServerReasoningEfforts,
   appServerServiceTier,
   warmupEnabled: appServerWarmupEnabled,
+  toolPath: retrievalToolDirectory,
 });
 
 const store = new JobStore({
@@ -88,6 +101,13 @@ const store = new JobStore({
 const app = createWikiHttpServer({
   store,
   logger: httpLoggerEnabled,
+  retrieval: graphRetrievalEnabled
+    ? {
+        token: retrievalToken,
+        search: (input) => wikiRetriever.search(input),
+        read: (input) => wikiRetriever.read(input),
+      }
+    : undefined,
   health: () => ({
     ok: true,
     wikiRoot,

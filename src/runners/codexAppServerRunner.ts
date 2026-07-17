@@ -6,6 +6,7 @@ import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { formatJobInput } from "../jobs/jobCommand.js";
 import type { Job, JobError, RunningProcess, RunnerResult } from "../jobs/jobTypes.js";
+import { makeCodexEnvironment } from "./codexExecRunner.js";
 
 const STDERR_TAIL_LIMIT = 16_384;
 const START_TIMEOUT_MS = 20_000;
@@ -66,6 +67,7 @@ export type CodexAppServerRunnerOptions = {
   model?: string;
   reasoningEffort?: string;
   serviceTier?: string;
+  toolPath?: string;
   input?: string;
   onAgentEvent: (event: unknown) => void;
 };
@@ -340,10 +342,7 @@ export class CodexAppServerManager {
 
     const child = spawn(options.codexBin, ["app-server", "--listen", wsUrl], {
       cwd: options.wikiRoot,
-      env: {
-        ...process.env,
-        CODEX_HOME: options.codexHome,
-      },
+      env: makeCodexEnvironment(options.codexHome, process.env, options.toolPath),
       shell: process.platform === "win32" && !options.codexBin.toLowerCase().endsWith(".exe"),
       stdio: ["pipe", "pipe", "pipe"],
       windowsHide: true,

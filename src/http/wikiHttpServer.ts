@@ -13,12 +13,43 @@ type HttpJobStore = Pick<
 export type WikiHttpServerOptions = {
   store: HttpJobStore;
   health: () => unknown;
+  retrieval?: {
+    token: string;
+    search: (input: {
+      query: string;
+      command?: "query" | "ingest";
+      maxCandidates?: number;
+      maxHops?: 1 | 2;
+    }) => unknown;
+    read: (input: {
+      path: string;
+      heading?: string;
+      startLine?: number;
+      endLine?: number;
+      full?: boolean;
+    }) => unknown;
+  };
   logger?: boolean;
 };
 
 const paramsSchema = z.object({
   id: z.string().uuid(),
 });
+
+const retrievalSearchSchema = z.object({
+  query: z.string().trim().min(1),
+  command: z.enum(["query", "ingest"]).optional(),
+  maxCandidates: z.number().int().min(1).max(24).optional(),
+  maxHops: z.union([z.literal(1), z.literal(2)]).optional(),
+}).strict();
+
+const retrievalReadSchema = z.object({
+  path: z.string().trim().min(1),
+  heading: z.string().trim().min(1).optional(),
+  startLine: z.number().int().positive().optional(),
+  endLine: z.number().int().positive().optional(),
+  full: z.boolean().optional(),
+}).strict();
 
 /**
  * Owns the public HTTP contract. Process startup and concrete runner wiring stay
@@ -37,6 +68,34 @@ export function createWikiHttpServer(options: WikiHttpServerOptions) {
 
   app.get("/health", async () => options.health());
   app.get("/metrics/jobs", async () => options.store.getMetricsSummary());
+
+  app.post("/_internal/retrieval/search", async (request, reply) => {
+    const retrieval = options.retrieval;
+    if (!retrieval || !isInternalRetrievalRequest(retrieval.token, request.headers["x-wiki-retrieval-token"])) {
+      return reply.code(404).send({ error: "not found" });
+    }
+    const parsed = retrievalSearchSchema.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ error: "invalid retrieval search request" });
+    try {
+      return retrieval.search(parsed.data);
+    } catch (error) {
+      return reply.code(400).send({ error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
+  app.post("/_internal/retrieval/read", async (request, reply) => {
+    const retrieval = options.retrieval;
+    if (!retrieval || !isInternalRetrievalRequest(retrieval.token, request.headers["x-wiki-retrieval-token"])) {
+      return reply.code(404).send({ error: "not found" });
+    }
+    const parsed = retrievalReadSchema.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ error: "invalid retrieval read request" });
+    try {
+      return retrieval.read(parsed.data);
+    } catch (error) {
+      return reply.code(400).send({ error: error instanceof Error ? error.message : String(error) });
+    }
+  });
 
   app.post("/ingest", async (request, reply) => {
     return enqueueCommand(options.store, "ingest", request.body, reply);
@@ -165,6 +224,13 @@ export function createWikiHttpServer(options: WikiHttpServerOptions) {
   });
 
   return app;
+}
+
+function isInternalRetrievalRequest(
+  expectedToken: string,
+  token: string | string[] | undefined,
+) {
+  return typeof token === "string" && token === expectedToken;
 }
 
 function enqueueCommand(
