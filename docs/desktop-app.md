@@ -111,8 +111,9 @@ failure details are normalized, and tray logging applies a final redaction pass.
 
 ## Visual Direction
 
-The visual direction adapts the MIT-licensed `tw93/kami` constraint system
-rather than copying its pages literally:
+The visual direction adapts the constraint system of the MIT-licensed
+[`tw93/Kami`](https://github.com/tw93/Kami) project rather than copying its
+pages or assets literally:
 
 - warm parchment canvas `#f5f4ed`;
 - ink blue `#1B365D` as the single structural accent;

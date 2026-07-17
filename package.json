@@ -3,6 +3,7 @@
   "version": "0.3.3",
   "description": "Local desktop agent server for an LLM-maintained wiki",
   "author": "Wiki Server Contributors",
+  "license": "MIT",
   "private": true,
   "main": "tray/main.cjs",
   "type": "module",
