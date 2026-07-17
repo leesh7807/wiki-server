@@ -46,6 +46,9 @@ test("packaging supports Windows and Linux desktop artifacts", () => {
 });
 
 test("tag releases publish installable artifacts with version and checksum guards", () => {
+  for (const script of ["app:dist", "app:dist:win", "app:dist:linux"]) {
+    assert.match(packageConfig.scripts[script], /--publish never$/);
+  }
   assert.match(releaseWorkflow, /test "\$GITHUB_REF_NAME" = "v\$\(node -p/);
   assert.match(releaseWorkflow, /release\/\*\.exe/);
   assert.match(releaseWorkflow, /release\/\*\.AppImage/);
