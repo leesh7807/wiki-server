@@ -1,7 +1,9 @@
 const fs = require("node:fs");
 const path = require("node:path");
+const zlib = require("node:zlib");
 
-const outPath = path.join(__dirname, "icon.ico");
+const icoPath = path.join(__dirname, "icon.ico");
+const pngPath = path.join(__dirname, "icon.png");
 const sizes = [16, 24, 32, 48, 64, 256];
 const images = sizes.map(makeIconImage);
 
@@ -28,8 +30,10 @@ for (const image of images) {
   offset += image.data.length;
 }
 
-fs.writeFileSync(outPath, Buffer.concat([header, ...entries, ...images.map((image) => image.data)]));
-console.log(outPath);
+fs.writeFileSync(icoPath, Buffer.concat([header, ...entries, ...images.map((image) => image.data)]));
+fs.writeFileSync(pngPath, makePngIcon(512));
+console.log(icoPath);
+console.log(pngPath);
 
 function makeIconImage(size) {
   const dibHeader = Buffer.alloc(40);
@@ -61,6 +65,54 @@ function makeIconImage(size) {
     height: size,
     data: Buffer.concat([dibHeader, pixels, mask]),
   };
+}
+
+function makePngIcon(size) {
+  const rows = Buffer.alloc((size * 4 + 1) * size);
+  for (let y = 0; y < size; y += 1) {
+    const rowOffset = y * (size * 4 + 1);
+    rows[rowOffset] = 0;
+    for (let x = 0; x < size; x += 1) {
+      const color = pixelColor(x + 0.5, y + 0.5, size);
+      const offset = rowOffset + 1 + x * 4;
+      rows[offset] = color.r;
+      rows[offset + 1] = color.g;
+      rows[offset + 2] = color.b;
+      rows[offset + 3] = color.a;
+    }
+  }
+
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(size, 0);
+  header.writeUInt32BE(size, 4);
+  header[8] = 8;
+  header[9] = 6;
+  return Buffer.concat([
+    Buffer.from("89504e470d0a1a0a", "hex"),
+    pngChunk("IHDR", header),
+    pngChunk("IDAT", zlib.deflateSync(rows, { level: 9 })),
+    pngChunk("IEND", Buffer.alloc(0)),
+  ]);
+}
+
+function pngChunk(type, data) {
+  const typeBuffer = Buffer.from(type, "ascii");
+  const length = Buffer.alloc(4);
+  length.writeUInt32BE(data.length, 0);
+  const crc = Buffer.alloc(4);
+  crc.writeUInt32BE(crc32(Buffer.concat([typeBuffer, data])), 0);
+  return Buffer.concat([length, typeBuffer, data, crc]);
+}
+
+function crc32(buffer) {
+  let crc = 0xffffffff;
+  for (const value of buffer) {
+    crc ^= value;
+    for (let bit = 0; bit < 8; bit += 1) {
+      crc = (crc >>> 1) ^ (crc & 1 ? 0xedb88320 : 0);
+    }
+  }
+  return (crc ^ 0xffffffff) >>> 0;
 }
 
 function pixelColor(x, y, size) {

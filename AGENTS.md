@@ -23,8 +23,9 @@ back into this repository as a packaging seed.
 Default local layout:
 
 - Server repo: `%USERPROFILE%\projects\wiki-server`
-- Installed wiki root: `%LOCALAPPDATA%\Wiki Server\wiki-root`, passed to the
-  server as `WIKI_ROOT`; source-only development may use
+- Installed wiki root: `%LOCALAPPDATA%\Wiki Server\wiki-root` on Windows or
+  `${XDG_DATA_HOME:-~/.local/share}/wiki-server/wiki-root` on Linux, passed to
+  the server as `WIKI_ROOT`; source-only development may use
   `%USERPROFILE%\projects\wiki` or an explicit `WIKI_ROOT`
 - HTTP API: `http://127.0.0.1:55173` by default; use the active endpoint shown
   by the desktop app when it reports a port fallback

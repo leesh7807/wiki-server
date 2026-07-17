@@ -33,11 +33,14 @@ The main window should grow toward four visible surfaces:
 - Settings: per-command model and reasoning profiles, startup, logs, and
   diagnostics.
 
-Settings includes a Windows login-start option. When enabled, Electron registers
-the packaged executable with the `--hidden` argument. On the next login the app
-starts the local server and tray in the background without opening its main
-window. The operating-system login item is the stored source of truth, so the
-toggle remains accurate across app restarts and installer upgrades.
+Settings includes a login-start option. Windows and macOS use Electron login
+items; Linux writes an XDG autostart desktop entry. Each launches the app with
+the `--hidden` argument so the local server and tray start without opening the
+main window. The operating-system entry is the stored source of truth. An
+AppImage entry points to the original AppImage rather than Electron's temporary
+mount. Managed source launch re-enters `scripts/run-desktop.cjs`, preserving the
+same data boundary, but remains valid only while the checkout and Node.js path
+stay in place.
 
 ## Installable Data Layout
 
@@ -45,13 +48,17 @@ Packaged application resources are immutable. The checked-in `wiki-template/`
 contains only a minimal directory layout and operating contract for a new wiki;
 it contains no user knowledge snapshot.
 
-Recommended Windows layout:
+Managed data stays outside both the application and source directories:
 
 ```text
 %LOCALAPPDATA%\Wiki Server\
   wiki-root\        # mutable durable wiki with its own independent .git history
   runtime\          # jobs, raw events, Codex home, tray logs
   config.json       # desktop-managed settings and model profiles
+
+${XDG_DATA_HOME:-~/.local/share}/wiki-server/
+  wiki-root/        # Linux operational wiki
+  runtime/          # Linux jobs, raw events, Codex home, tray logs
 ```
 
 Installer upgrades must never overwrite an existing live `wiki-root/`.
@@ -65,11 +72,11 @@ therefore creates a real repository without shipping any previous user's wiki
 history. Upgrades add Git metadata only to legacy managed roots that lack it and
 never overwrite their content.
 
-Install, upgrade, and uninstall never present a data-deletion prompt. They
-always preserve `%LOCALAPPDATA%\Wiki Server`, including the wiki, job history,
-logs, Codex runtime home, and desktop config. Data deletion belongs in an
-explicit app-owned management surface rather than the installer lifecycle.
-Application upgrades also never overwrite the live wiki.
+Install, upgrade, source checkout replacement, and uninstall preserve the
+managed data root, including the wiki, job history, logs, Codex runtime home,
+and desktop config. Data deletion belongs in an explicit app-owned management
+surface rather than the installer lifecycle. Application upgrades also never
+overwrite the live wiki.
 
 Source-control-only `.gitkeep` placeholders are not required in the packaged
 seed. First-run initialization creates the expected empty wiki directories
@@ -77,8 +84,14 @@ explicitly after copying content.
 
 The Wiki screen opens the operational wiki and runtime directory as separate
 actions. It also exposes Git branch, HEAD, commit count, working-tree state, and
-Obsidian availability. Obsidian integration uses the registered `obsidian://`
-protocol and opens the operational `index.md` by absolute path.
+Obsidian availability. Windows checks the registered protocol and executable;
+Linux checks XDG Obsidian configuration and common executable paths. The
+registered `obsidian://` protocol opens operational `index.md` by absolute path.
+
+The package configuration produces a Windows NSIS installer, a Debian package,
+and a portable Linux AppImage. The NSIS and Debian artifacts are the installed
+runtime. The source launcher follows the same managed-data boundary for
+pre-release verification but is not presented as a system installation.
 
 Git remote import is a two-step desktop action. The first step uses system Git
 to clone into a same-volume staging directory, validates regular
@@ -111,8 +124,9 @@ failure details are normalized, and tray logging applies a final redaction pass.
 
 ## Visual Direction
 
-The visual direction adapts the MIT-licensed `tw93/kami` constraint system
-rather than copying its pages literally:
+Design reference: [`tw93/Kami`](https://github.com/tw93/Kami) (MIT).
+
+The visual direction uses:
 
 - warm parchment canvas `#f5f4ed`;
 - ink blue `#1B365D` as the single structural accent;

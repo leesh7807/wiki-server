@@ -78,8 +78,10 @@ test("wiki Git controls use clear hierarchy and left-aligned operation feedback"
   assert.match(app, /checkButton\.disabled = !remote\.available \|\| !remote\.origin/);
 });
 
-test("desktop settings expose background launch at Windows login", () => {
+test("desktop settings expose platform-neutral background launch at login", () => {
   assert.match(html, /id="autoLaunchToggle"/);
+  assert.match(html, /<h3>로그인 시 자동 시작<\/h3>/);
+  assert.doesNotMatch(html, /Windows 로그인/);
   assert.match(app, /api\.getAutoLaunch\(\)/);
   assert.match(app, /api\.setAutoLaunch\(requested\)/);
 });
