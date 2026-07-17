@@ -2,38 +2,25 @@
 
 **English** | [한국어](README.md)
 
-Installable local agent server for a user-owned, Git-managed wiki.
+This is the local agent server I use to maintain my operational wiki.
 
-The server owns HTTP intake, the Codex runner, job lifecycle, runtime logs,
-observability metrics, and tray startup. Installed wiki
-content lives only under `%LOCALAPPDATA%\Wiki Server\wiki-root` by default and
-has its own Git history. The tracked `wiki-template/` contains only the minimal
-directory and operating structure for a new installation.
+It is not meant to be a general-purpose wiki product. It receives work, runs it
+through Codex, exposes the job lifecycle, and keeps the wiki under Git. The
+shape of the system is closely tied to how I work and think, so it may not fit
+someone else's workflow unchanged. The code and design are public as a
+reference.
 
-## Why This Repository Is Public
+The actual wiki lives in its own private Git repository under
+`%LOCALAPPDATA%\Wiki Server\wiki-root`. This repository contains only the
+server, desktop app, tests, design documents, and a minimal first-run template.
+Job history and caches stay in local runtime data and are not committed.
 
-This repository is a public record of one personal knowledge-work system: the
-concepts behind it, the decisions that shaped it, and the implementation that
-resulted. It is not presented as a general-purpose wiki product or a promise of
-support. The workflow is intentionally close to how its author works and
-thinks, but the code and design may still be useful as a reference.
+The service is local-only and unauthenticated. It should not be exposed outside
+the local machine without adding authentication and network controls.
 
-The software and the knowledge it operates on have deliberately separate
-ownership and Git histories:
-
-| Surface | Intended visibility | Contents |
-| --- | --- | --- |
-| This `wiki-server` repository | Public | Server, desktop app, tests, design documents, and a minimal first-run template |
-| Operational wiki repository | Private | Personal notes, sources, decisions, and accumulated knowledge |
-| Runtime data | Local only | Job metadata, raw agent events, caches, and isolated Codex state |
-
-The service is local-only and unauthenticated. Keep it bound to the local
-machine unless authentication and network controls are added deliberately.
-
-Repository ownership, public integration, and security constraints are defined
-in `AGENTS.md`. Day-to-day module ownership and verification guidance is in
-`docs/code-quality.md`. Start code changes with `docs/code-map.md`, which routes
-behavior to its owning domain and records the dependency and reuse rules.
+Repository ownership and public API boundaries are defined in `AGENTS.md`.
+`docs/code-map.md` routes changes to their owning modules, and
+`docs/code-quality.md` records the verification rules.
 
 ## Run
 
