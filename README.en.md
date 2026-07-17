@@ -2,18 +2,23 @@
 
 **English** | [한국어](README.md)
 
-This is the local agent server I use to maintain my operational wiki.
+Local agent server for maintaining a Git-managed operational wiki.
 
-It is not meant to be a general-purpose wiki product. It receives work, runs it
-through Codex, exposes the job lifecycle, and keeps the wiki under Git. The
-shape of the system is closely tied to how I work and think, so it may not fit
-someone else's workflow unchanged. The code and design are public as a
-reference.
+It receives work over HTTP, runs it through Codex, and exposes retrieval, Git
+state, and job events in one desktop app. The actual wiki stays in a separate
+private Git repository. This repository contains only the server, desktop app,
+tests, design documents, and a minimal first-run template.
 
-The actual wiki lives in its own private Git repository under
-`%LOCALAPPDATA%\Wiki Server\wiki-root`. This repository contains only the
-server, desktop app, tests, design documents, and a minimal first-run template.
-Job history and caches stay in local runtime data and are not committed.
+## Core
+
+- Server code and wiki content keep separate Git histories.
+- Every operation passes through the local HTTP API and a single queue.
+- Retrieval searches the graph first and reads only selected document ranges.
+- Job state, events, and retrieval usage remain observable as runtime data.
+
+## Runtime Structure
+
+<img src="docs/assets/wiki-server-architecture.png" width="760" alt="Wiki Server public code, private operational wiki, and local-only runtime records">
 
 The service is local-only and unauthenticated. It should not be exposed outside
 the local machine without adding authentication and network controls.
@@ -22,15 +27,22 @@ Repository ownership and public API boundaries are defined in `AGENTS.md`.
 `docs/code-map.md` routes changes to their owning modules, and
 `docs/code-quality.md` records the verification rules.
 
-## Run
+## Installed App
+
+Windows desktop app. Runs the local server from the system tray and opens its
+desktop interface.
+
+On first launch, the app initializes the wiki under
+`%LOCALAPPDATA%\Wiki Server\wiki-root`. Updates and uninstall preserve the wiki
+and runtime data. See `docs/desktop-app.md` for the data boundary and interface
+design.
+
+## Development
 
 ```powershell
 npm install
 npm run dev
 ```
-
-Development is pinned to Node.js `24.15.0` through `.node-version`. With fnm,
-open a new shell in the repository or run `fnm use` before npm commands.
 
 Defaults:
 
@@ -71,20 +83,8 @@ window. The desktop renderer is separate from the compatibility `/client`
 website. Closing the window hides it to the tray; use **Open Wiki Server** to
 restore it. Login and detached startup remain background-only.
 
-The installable-app data and visual direction are defined in
-`docs/desktop-app.md`. User-owned wiki management surfaces and their recommended
-order are tracked in `docs/user-management-surfaces.md`.
-
-Build an unpacked app or Windows installer with:
-
-```powershell
-npm run app:pack
-npm run app:dist
-```
-
-The installed app initializes its writable wiki once under
-`%LOCALAPPDATA%\Wiki Server\wiki-root`. Install, update, and uninstall preserve
-that data without presenting a deletion prompt.
+User-owned wiki management surfaces and their recommended order are tracked in
+`docs/user-management-surfaces.md`.
 
 ## API
 
@@ -164,11 +164,7 @@ it never stores access tokens, passwords, or SSH keys in Wiki Server settings.
 
 ## Design Acknowledgement
 
-The desktop visual direction adapts the constraint system of
-[tw93/Kami](https://github.com/tw93/Kami), an MIT-licensed project, rather than
-copying its pages or assets literally. Its paper-like canvas, restrained ink
-accent, typographic hierarchy, and low-noise presentation were important design
-references for this app.
+Design reference: [tw93/Kami](https://github.com/tw93/Kami)
 
 ## License
 
