@@ -14,7 +14,11 @@ const fs = require("node:fs");
 const http = require("node:http");
 const os = require("node:os");
 const path = require("node:path");
-const { createAutoLaunch } = require("./system/auto-launch.cjs");
+const {
+  createAutoLaunch,
+  resolveAutoLaunchTarget,
+} = require("./system/auto-launch.cjs");
+const { resolvePackagedDataRoot } = require("./system/data-paths.cjs");
 const { makeIntegrationGuide } = require("./server/integration-guide.cjs");
 const { resolveCodexCommand } = require("./server/codex-command.cjs");
 const { parseAppPort, selectServerPort } = require("./server/port-selection.cjs");
@@ -30,14 +34,17 @@ const {
 } = require("./wiki/git-remote.cjs");
 
 const packageRoot = path.resolve(__dirname, "..");
-const packagedDataRoot = path.join(
-  process.env.LOCALAPPDATA || path.join(os.homedir(), "AppData", "Local"),
-  "Wiki Server",
-);
-if (app.isPackaged) {
+const packagedDataRoot = resolvePackagedDataRoot({
+  platform: process.platform,
+  env: process.env,
+  home: os.homedir(),
+});
+const managedSourceLaunch = process.env.WIKI_MANAGED_SOURCE === "1";
+if (app.isPackaged || managedSourceLaunch) {
+  fs.mkdirSync(packagedDataRoot, { recursive: true });
   app.setPath("userData", packagedDataRoot);
 }
-const managedWikiRoot = app.isPackaged
+const managedWikiRoot = app.isPackaged || managedSourceLaunch
   ? path.join(packagedDataRoot, "wiki-root")
   : undefined;
 const configuredWikiRoot = process.env.WIKI_ROOT
@@ -77,14 +84,24 @@ const serverArgs = app.isPackaged
   : [tsxCliPath, serverEntryPath];
 const serverProcessCwd = app.isPackaged ? configuredWikiRoot : packageRoot;
 const codexCommand = resolveCodexCommand();
-const iconPath = path.join(packageRoot, "tray", "icon.ico");
+const iconPath = path.join(
+  packageRoot,
+  "tray",
+  process.platform === "win32" ? "icon.ico" : "icon.png",
+);
 const fallbackIconPath = path.join(packageRoot, "tray", "icon.svg");
+const autoLaunchTarget = resolveAutoLaunchTarget({
+  platform: process.platform,
+  env: process.env,
+  managedSourceLaunch,
+  executablePath: process.execPath,
+});
 const autoLaunch = createAutoLaunch({
   app,
   name: "local.wiki-server",
   platform: process.platform,
-  executablePath: process.execPath,
-  args: app.isPackaged ? ["--hidden"] : [trayMainPath, "--hidden"],
+  executablePath: autoLaunchTarget.executablePath,
+  args: autoLaunchTarget.args,
 });
 const startHidden = process.argv.includes("--hidden");
 
@@ -313,7 +330,9 @@ function registerDesktopHandlers() {
       portWarning,
       integrationGuide: makeIntegrationGuide(serverUrl),
       wikiRootMode: process.env.WIKI_ROOT
-        ? "WIKI_ROOT override"
+        ? managedSourceLaunch
+          ? "Managed source"
+          : "WIKI_ROOT override"
         : app.isPackaged
           ? "Managed install"
           : "Development sibling",

@@ -1,5 +1,6 @@
 const { execFileSync } = require("node:child_process");
 const fs = require("node:fs");
+const os = require("node:os");
 const path = require("node:path");
 
 function getWikiGitState(wikiRoot, runGit = defaultRunGit) {
@@ -34,7 +35,7 @@ function getWikiGitState(wikiRoot, runGit = defaultRunGit) {
 
 function getObsidianState(wikiRoot, options = {}) {
   const platform = options.platform || process.platform;
-  if (platform !== "win32") {
+  if (platform !== "win32" && platform !== "linux") {
     return {
       installed: false,
       protocolRegistered: false,
@@ -45,25 +46,42 @@ function getObsidianState(wikiRoot, options = {}) {
   }
 
   const env = options.env || process.env;
+  const home = options.home || os.homedir();
+  const platformPath = platform === "win32" ? path.win32 : path.posix;
   const exists = options.exists || fs.existsSync;
   const readFile = options.readFile || ((file) => fs.readFileSync(file, "utf8"));
-  const protocolCommand = options.protocolCommand === undefined
-    ? readObsidianProtocolCommand()
-    : options.protocolCommand;
-  const candidates = [
-    extractExecutable(protocolCommand),
-    path.join(env.LOCALAPPDATA || "", "Programs", "Obsidian", "Obsidian.exe"),
-    path.join(env.LOCALAPPDATA || "", "Obsidian", "Obsidian.exe"),
-    path.join(env.ProgramFiles || "", "Obsidian", "Obsidian.exe"),
-  ].filter(Boolean);
+  const protocolCommand = platform === "win32"
+    ? options.protocolCommand === undefined
+      ? readObsidianProtocolCommand()
+      : options.protocolCommand
+    : "";
+  const candidates = (platform === "win32"
+    ? [
+        extractExecutable(protocolCommand),
+        platformPath.join(env.LOCALAPPDATA || "", "Programs", "Obsidian", "Obsidian.exe"),
+        platformPath.join(env.LOCALAPPDATA || "", "Obsidian", "Obsidian.exe"),
+        platformPath.join(env.ProgramFiles || "", "Obsidian", "Obsidian.exe"),
+      ]
+    : [
+        env.OBSIDIAN_BIN,
+        platformPath.join(home, ".local", "bin", "obsidian"),
+        "/usr/local/bin/obsidian",
+        "/usr/bin/obsidian",
+        "/snap/bin/obsidian",
+      ]).filter(Boolean);
   const executablePath = candidates.find((candidate) => exists(candidate)) || "";
-  const configPath = path.join(env.APPDATA || "", "obsidian", "obsidian.json");
-  const vaultRegistered = isRegisteredVault(configPath, wikiRoot, exists, readFile);
-  const installed = Boolean(executablePath || protocolCommand);
+  const configPath = platform === "win32"
+    ? platformPath.join(env.APPDATA || "", "obsidian", "obsidian.json")
+    : platformPath.join(env.XDG_CONFIG_HOME || platformPath.join(home, ".config"), "obsidian", "obsidian.json");
+  const vaultRegistered = isRegisteredVault(configPath, wikiRoot, exists, readFile, platform);
+  const installed = Boolean(executablePath || protocolCommand || exists(configPath));
+  const protocolRegistered = options.protocolRegistered === undefined
+    ? platform === "win32" ? Boolean(protocolCommand) : installed
+    : Boolean(options.protocolRegistered);
 
   return {
     installed,
-    protocolRegistered: Boolean(protocolCommand),
+    protocolRegistered,
     vaultRegistered,
     executablePath,
     message: !installed
@@ -78,13 +96,13 @@ function makeObsidianOpenUri(wikiRoot, page = "index.md") {
   return `obsidian://open?path=${encodeURIComponent(path.resolve(wikiRoot, page))}`;
 }
 
-function isRegisteredVault(configPath, wikiRoot, exists, readFile) {
+function isRegisteredVault(configPath, wikiRoot, exists, readFile, platform) {
   if (!configPath || !exists(configPath)) return false;
   try {
     const config = JSON.parse(readFile(configPath));
-    const expected = normalizeWindowsPath(wikiRoot);
+    const expected = normalizePlatformPath(wikiRoot, platform);
     return Object.values(config.vaults || {}).some((vault) =>
-      normalizeWindowsPath(vault?.path || "") === expected);
+      normalizePlatformPath(vault?.path || "", platform) === expected);
   } catch {
     return false;
   }
@@ -118,8 +136,10 @@ function extractExecutable(command) {
   return plain?.[1] || "";
 }
 
-function normalizeWindowsPath(value) {
-  return path.resolve(value).replace(/[\\/]+$/, "").toLowerCase();
+function normalizePlatformPath(value, platform) {
+  const platformPath = platform === "win32" ? path.win32 : path.posix;
+  const normalized = platformPath.resolve(value).replace(/[\\/]+$/, "");
+  return platform === "win32" ? normalized.toLowerCase() : normalized;
 }
 
 function defaultRunGit(wikiRoot, args) {

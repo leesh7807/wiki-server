@@ -422,7 +422,7 @@ async function updateAutoLaunch(event) {
     toggle.disabled = !autoLaunch.supported;
     document.getElementById("autoLaunchLabel").textContent = autoLaunch.enabled ? "사용 중" : "사용 안 함";
     message.textContent = autoLaunch.enabled
-      ? "다음 Windows 로그인부터 백그라운드에서 시작합니다."
+      ? "다음 로그인부터 백그라운드에서 시작합니다."
       : "자동 시작을 사용하지 않습니다.";
   } catch (error) {
     toggle.checked = !requested;
