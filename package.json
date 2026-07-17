@@ -1,6 +1,6 @@
 {
   "name": "wiki-server",
-  "version": "0.3.3",
+  "version": "1.0.0",
   "description": "Local desktop agent server for an LLM-maintained wiki",
   "homepage": "https://github.com/leesh7807/wiki-server",
   "repository": {
