@@ -2,9 +2,14 @@ name: Desktop release
 
 on:
   workflow_dispatch:
+  pull_request:
   push:
     tags:
       - "v*"
+
+concurrency:
+  group: desktop-release-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
