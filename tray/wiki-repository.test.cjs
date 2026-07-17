@@ -8,6 +8,7 @@ const packageConfig = JSON.parse(readFileSync(path.join(packageRoot, "package.js
 const gitignore = readFileSync(path.join(packageRoot, ".gitignore"), "utf8");
 const main = readFileSync(path.join(__dirname, "main.cjs"), "utf8");
 const installation = readFileSync(path.join(__dirname, "wiki", "wiki-installation.cjs"), "utf8");
+const sourceLauncher = readFileSync(path.join(packageRoot, "scripts", "run-desktop.cjs"), "utf8");
 
 test("server tracks only a minimal wiki template", () => {
   assert.doesNotMatch(gitignore, /^\/wiki-template\/$/m);
@@ -26,6 +27,23 @@ test("packaging carries wiki content and renamed Git history separately", () => 
   assert.ok(resources.some((entry) => entry.to === "wiki-git-seed"));
   const contentSeed = resources.find((entry) => entry.to === "wiki-root-seed");
   assert.equal(contentSeed.from, "wiki-template");
+});
+
+test("packaging supports Windows and Linux desktop artifacts", () => {
+  assert.equal(packageConfig.desktopName, "local.wiki-server.desktop");
+  assert.equal(packageConfig.build.win.target, "nsis");
+  assert.deepEqual(packageConfig.build.linux.target, ["AppImage", "deb"]);
+  assert.equal(packageConfig.build.linux.icon, "tray/icon.png");
+  assert.equal(packageConfig.build.linux.syncDesktopName, true);
+  assert.equal(existsSync(path.join(packageRoot, "tray", "icon.png")), true);
+});
+
+test("source launcher initializes the same durable wiki boundary before opening Electron", () => {
+  assert.equal(packageConfig.scripts.app, "node scripts/run-desktop.cjs");
+  assert.match(sourceLauncher, /resolvePackagedDataRoot/);
+  assert.match(sourceLauncher, /ensurePackagedWikiRoot/);
+  assert.match(sourceLauncher, /WIKI_MANAGED_SOURCE: "1"/);
+  assert.match(sourceLauncher, /WIKI_SERVER_DATA_DIR: runtimeRoot/);
 });
 
 test("packaging excludes tests and build-only tray scripts", () => {

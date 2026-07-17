@@ -2,6 +2,7 @@
   "name": "wiki-server",
   "version": "0.3.3",
   "description": "Local desktop agent server for an LLM-maintained wiki",
+  "desktopName": "local.wiki-server.desktop",
   "author": "Wiki Server Contributors",
   "license": "MIT",
   "private": true,
@@ -12,16 +13,19 @@
   },
   "scripts": {
     "dev": "tsx src/server.ts",
+    "app": "node scripts/run-desktop.cjs",
     "tray": "electron tray/main.cjs",
     "make-icon": "node tray/make-icon.cjs",
     "start": "node dist/src/server.js",
     "typecheck": "tsc --noEmit",
-    "test": "node --test tray/system/auto-launch.test.cjs tray/server/codex-command.test.cjs tray/server/port-selection.test.cjs tray/server/integration-guide.test.cjs tray/wiki-repository.test.cjs tray/wiki/git-remote.test.cjs tray/wiki/wiki-installation.test.cjs tray/wiki/wiki-workspace.test.cjs desktop/desktop.test.cjs && tsx --test src/architecture.test.ts src/retrieval/wikiRetrieval.test.ts src/retrieval/wikiRetrievalCommand.test.ts src/runners/agentRunner.test.ts src/runners/codexAppServerRunner.test.ts src/runners/codexAppServerProtocol.test.ts src/runners/codexExecRunner.test.ts src/runners/codexVersion.test.ts src/http/clientHtml.test.ts src/http/wikiHttpServer.test.ts src/jobs/jobCommand.test.ts src/jobs/retrievalMetrics.test.ts src/config/wikiServerConfig.test.ts src/http/serverStartup.test.ts src/jobs/jobStore.test.ts",
+    "test": "node --test tray/system/auto-launch.test.cjs tray/system/data-paths.test.cjs tray/server/codex-command.test.cjs tray/server/port-selection.test.cjs tray/server/integration-guide.test.cjs tray/wiki-repository.test.cjs tray/wiki/git-remote.test.cjs tray/wiki/wiki-installation.test.cjs tray/wiki/wiki-workspace.test.cjs desktop/desktop.test.cjs && tsx --test src/architecture.test.ts src/retrieval/wikiRetrieval.test.ts src/retrieval/wikiRetrievalCommand.test.ts src/runners/agentRunner.test.ts src/runners/codexAppServerRunner.test.ts src/runners/codexAppServerProtocol.test.ts src/runners/codexExecRunner.test.ts src/runners/codexVersion.test.ts src/http/clientHtml.test.ts src/http/wikiHttpServer.test.ts src/jobs/jobCommand.test.ts src/jobs/retrievalMetrics.test.ts src/config/wikiServerConfig.test.ts src/http/serverStartup.test.ts src/jobs/jobStore.test.ts",
     "test:integration": "tsx --test src/runners/codexAppServerRunner.integration.test.ts",
     "build": "tsc",
     "prepare:wiki-seed": "node tray/prepare-wiki-seed.cjs",
     "app:pack": "npm run build && npm run prepare:wiki-seed && electron-builder --dir",
-    "app:dist": "npm run build && npm run prepare:wiki-seed && electron-builder --win nsis"
+    "app:dist": "npm run build && npm run prepare:wiki-seed && electron-builder",
+    "app:dist:win": "npm run build && npm run prepare:wiki-seed && electron-builder --win nsis",
+    "app:dist:linux": "npm run build && npm run prepare:wiki-seed && electron-builder --linux AppImage deb"
   },
   "dependencies": {
     "fastify": "^5.6.2",
@@ -74,6 +78,15 @@
     "win": {
       "icon": "tray/icon.ico",
       "target": "nsis"
+    },
+    "linux": {
+      "icon": "tray/icon.png",
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Utility",
+      "syncDesktopName": true
     },
     "nsis": {
       "oneClick": false,
